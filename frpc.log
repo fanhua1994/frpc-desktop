@@ -29,3 +29,37 @@
 2026-06-22 11:49:55.271 [I] [client/control.go:165] [72b0cfeb1e6b1ed6] [webrtc] start proxy success
 2026-06-22 13:20:43.413 [I] [http/middleware.go:35] http request: [/api/status]
 2026-06-22 13:20:43.413 [I] [http/middleware.go:38] http response [/api/status]: code [200]
+2026-06-22 13:36:19.227 [I] [sub/root.go:201] start frpc service for config file [frpc.toml] with aggregated configuration
+2026-06-22 13:36:19.235 [I] [client/service.go:308] try to connect to server...
+2026-06-22 13:36:19.235 [I] [client/service.go:250] admin server listen on 127.0.0.1:7400
+2026-06-22 13:36:19.262 [I] [client/service.go:328] [02950c7d918c6755] login to server success, get run id [02950c7d918c6755]
+2026-06-22 13:36:19.262 [I] [proxy/proxy_manager.go:180] [02950c7d918c6755] proxy added: [webrtc]
+2026-06-22 13:36:19.269 [I] [client/control.go:165] [02950c7d918c6755] [webrtc] start proxy success
+2026-06-22 13:36:23.039 [I] [http/middleware.go:35] http request: [/api/status]
+2026-06-22 13:36:23.039 [I] [http/middleware.go:38] http response [/api/status]: code [200]
+2026-06-22 13:36:24.677 [I] [http/middleware.go:35] http request: [/api/status]
+2026-06-22 13:36:24.677 [I] [http/middleware.go:38] http response [/api/status]: code [200]
+2026-06-22 13:36:24.836 [I] [http/middleware.go:35] http request: [/api/status]
+2026-06-22 13:36:24.836 [I] [http/middleware.go:38] http response [/api/status]: code [200]
+2026-06-22 13:36:32.240 [I] [http/middleware.go:35] http request: [/api/config]
+2026-06-22 13:36:32.240 [I] [http/middleware.go:38] http response [/api/config]: code [200]
+2026-06-22 13:36:32.244 [I] [http/middleware.go:35] http request: [/api/reload]
+2026-06-22 13:36:32.244 [I] [proxy/proxy_manager.go:162] [02950c7d918c6755] proxy removed: [webrtc]
+2026-06-22 13:36:32.244 [I] [proxy/proxy_manager.go:180] [02950c7d918c6755] proxy added: [webrtc]
+2026-06-22 13:36:32.244 [I] [client/config_manager.go:52] success reload conf
+2026-06-22 13:36:32.244 [I] [http/middleware.go:38] http response [/api/reload]: code [200]
+2026-06-22 13:36:32.249 [I] [client/control.go:165] [02950c7d918c6755] [webrtc] start proxy success
+2026-06-22 13:36:33.119 [I] [http/middleware.go:35] http request: [/api/status]
+2026-06-22 13:36:33.119 [I] [http/middleware.go:38] http response [/api/status]: code [200]
+2026-06-22 13:37:56.854 [I] [http/middleware.go:35] http request: [/api/status]
+2026-06-22 13:37:56.854 [I] [http/middleware.go:38] http response [/api/status]: code [200]
+2026-06-22 13:39:02.240 [I] [sub/root.go:201] start frpc service for config file [frpc.toml] with aggregated configuration
+2026-06-22 13:39:02.248 [I] [client/service.go:308] try to connect to server...
+2026-06-22 13:39:02.248 [I] [client/service.go:250] admin server listen on 127.0.0.1:7400
+2026-06-22 13:39:02.277 [I] [client/service.go:328] [e0b5530961a585c7] login to server success, get run id [e0b5530961a585c7]
+2026-06-22 13:39:02.277 [I] [proxy/proxy_manager.go:180] [e0b5530961a585c7] proxy added: [webrtc]
+2026-06-22 13:39:02.283 [I] [client/control.go:165] [e0b5530961a585c7] [webrtc] start proxy success
+2026-06-22 13:39:04.236 [I] [http/middleware.go:35] http request: [/api/status]
+2026-06-22 13:39:04.236 [I] [http/middleware.go:38] http response [/api/status]: code [200]
+2026-06-22 13:39:19.803 [I] [http/middleware.go:35] http request: [/api/status]
+2026-06-22 13:39:19.803 [I] [http/middleware.go:38] http response [/api/status]: code [200]

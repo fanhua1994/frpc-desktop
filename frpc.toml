@@ -19,4 +19,4 @@ type = "http"
 enabled = true
 localIP = "127.0.0.1"
 localPort = 80
-subdomain = "webrtc"
+subdomain = "web3"

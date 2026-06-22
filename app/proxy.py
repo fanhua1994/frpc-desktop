@@ -135,7 +135,7 @@ class ProxyManager:
         )
         title_label.pack(side=tk.LEFT)
         
-        # 刷新按钮
+        # 按钮自右向左 pack，显示顺序为：新增、编辑、删除、刷新
         refresh_button = ttk.Button(
             header_frame,
             text="刷新",
@@ -144,16 +144,6 @@ class ProxyManager:
         )
         refresh_button.pack(side=tk.RIGHT, padx=(10, 0))
         
-        # 新增按钮
-        add_button = ttk.Button(
-            header_frame,
-            text="新增",
-            command=self.add_proxy,
-            width=10
-        )
-        add_button.pack(side=tk.RIGHT, padx=(10, 0))
-        
-        # 删除按钮
         delete_button = ttk.Button(
             header_frame,
             text="删除",
@@ -161,6 +151,22 @@ class ProxyManager:
             width=10
         )
         delete_button.pack(side=tk.RIGHT, padx=(10, 0))
+        
+        edit_button = ttk.Button(
+            header_frame,
+            text="编辑",
+            command=self.edit_proxy,
+            width=10
+        )
+        edit_button.pack(side=tk.RIGHT, padx=(10, 0))
+        
+        add_button = ttk.Button(
+            header_frame,
+            text="新增",
+            command=self.add_proxy,
+            width=10
+        )
+        add_button.pack(side=tk.RIGHT, padx=(10, 0))
         
         # 代理列表区域
         list_frame = ttk.LabelFrame(proxy_frame, text="代理列表", padding="10")
@@ -247,20 +253,28 @@ class ProxyManager:
         if not item_values or len(item_values) < 5:
             return
         
-        remote_addr = item_values[4]  # remote_addr 在第5列（索引4）
-        if not remote_addr or remote_addr.strip() == '':
+        proxy_name = item_values[0]
+        if not proxy_name or str(proxy_name).strip() in ('', '暂无代理'):
             return
+        
+        remote_addr = item_values[4]  # remote_addr 在第5列（索引4）
         
         # 创建右键菜单
         context_menu = tk.Menu(self.parent_window, tearoff=0)
-        # 使用 functools.partial 或直接定义函数来避免 lambda 闭包问题
-        def copy_remote_addr():
-            self.copy_to_clipboard(remote_addr)
-        
         context_menu.add_command(
-            label=f"复制远程地址: {remote_addr}",
-            command=copy_remote_addr
+            label="编辑",
+            command=self.edit_proxy
         )
+        if remote_addr and remote_addr.strip():
+            context_menu.add_separator()
+            # 使用 functools.partial 或直接定义函数来避免 lambda 闭包问题
+            def copy_remote_addr():
+                self.copy_to_clipboard(remote_addr)
+            
+            context_menu.add_command(
+                label=f"复制远程地址: {remote_addr}",
+                command=copy_remote_addr
+            )
         
         # 显示菜单
         try:
@@ -311,25 +325,43 @@ class ProxyManager:
         if not self.proxy_tree:
             return
         
+        # 双击时根据点击位置选中对应行
+        if event:
+            item_id = self.proxy_tree.identify_row(event.y)
+            if not item_id:
+                return
+            self.proxy_tree.selection_set(item_id)
+            self.proxy_tree.focus(item_id)
+        
         selection = self.proxy_tree.selection()
         if not selection:
+            messagebox.showwarning("提示", "请先选择要编辑的代理")
             return
         
         item = self.proxy_tree.item(selection[0])
         proxy_name = item['values'][0] if item['values'] else None
         
-        if not proxy_name:
+        if not proxy_name or str(proxy_name).strip() in ('', '暂无代理'):
             return
+        
+        proxy_name = str(proxy_name)
         
         # 从配置文件中读取代理信息
         config = load_frpc_toml()
-        proxy_data = None
+        if not config:
+            messagebox.showerror("错误", "无法读取配置文件")
+            return
         
-        if config and 'proxies' in config:
+        proxy_data = None
+        if 'proxies' in config:
             for proxy in config['proxies']:
-                if proxy.get('name') == proxy_name:
+                if str(proxy.get('name', '')) == proxy_name:
                     proxy_data = proxy
                     break
+        
+        if not proxy_data:
+            messagebox.showwarning("提示", f"未在配置文件中找到代理 '{proxy_name}'")
+            return
         
         self.show_proxy_edit_dialog(proxy_data)
     
@@ -552,7 +584,10 @@ class ProxyManager:
         
         def save_proxy():
             """保存代理配置"""
-            name = name_entry.get().strip()
+            if proxy_data:
+                name = str(proxy_data.get('name', '')).strip()
+            else:
+                name = name_entry.get().strip()
             ptype = type_combo.get().strip()
             enabled = enabled_var.get()
             local_ip = local_ip_entry.get().strip()
@@ -643,6 +678,10 @@ class ProxyManager:
                         new_proxy['customDomains'] = domains_list
             # stcp, sudp, xtcp 不需要额外字段
             
+            # 编辑时保留原有 annotations
+            if proxy_data and proxy_data.get('annotations'):
+                new_proxy['annotations'] = proxy_data['annotations']
+            
             # 读取现有配置
             config = load_frpc_toml()
             if not config:
@@ -656,10 +695,11 @@ class ProxyManager:
             
             # 如果是编辑，先删除旧配置
             if proxy_data:
-                config['proxies'] = [p for p in config['proxies'] if p.get('name') != name]
+                old_name = str(proxy_data.get('name', ''))
+                config['proxies'] = [p for p in config['proxies'] if str(p.get('name', '')) != old_name]
             
             # 检查名称是否已存在
-            if any(p.get('name') == name for p in config['proxies']):
+            if any(str(p.get('name', '')) == name for p in config['proxies']):
                 messagebox.showerror("错误", f"代理名称 '{name}' 已存在")
                 return
             
@@ -706,7 +746,8 @@ class ProxyManager:
                     dialog.destroy()
                     self.refresh_proxy_list()
                 else:
-                    messagebox.showinfo("成功", result.get('message', '代理配置已保存并重载'))
+                    action = "更新" if proxy_data else "保存"
+                    messagebox.showinfo("成功", result.get('message', f'代理配置已{action}并重载'))
                     dialog.destroy()
                     self.refresh_proxy_list()
             except Exception as e:
