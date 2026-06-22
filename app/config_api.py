@@ -40,8 +40,7 @@ def get_base_url() -> Optional[str]:
         # 构建 baseUrl
         base_url = f"http://{web_addr}:{web_port}"
         return base_url
-    except Exception as e:
-        print(f"读取配置文件失败: {e}")
+    except Exception:
         return None
 
 
@@ -60,10 +59,7 @@ def read_config_file() -> Optional[Dict[str, Any]]:
         # 如果存在认证信息，使用 auth 参数
         auth = get_web_auth()
         response = requests.get(url, auth=auth, timeout=5)
-        
-        print('读取配置文件：', response.status_code)
-        print('用户名 密码：', auth)
-        
+
         if response.status_code == 200:
             return response.json()
         else:
@@ -83,7 +79,7 @@ def read_config_file() -> Optional[Dict[str, Any]]:
 def reload_config() -> Optional[Dict[str, Any]]:
     """
     重载配置文件
-    接口：POST http://baseUrl/api/reload
+    接口：GET http://baseUrl/api/reload
     使配置生效
     """
     base_url = get_base_url()
@@ -95,8 +91,6 @@ def reload_config() -> Optional[Dict[str, Any]]:
         # 如果存在认证信息，使用 auth 参数
         auth = get_web_auth()
         response = requests.get(url, auth=auth, timeout=5)
-        
-        print('重载配置文件：', response.status_code)
 
         if response.status_code in [200, 201, 204]:
             # 尝试解析 JSON 响应，如果没有响应体则返回成功
@@ -172,8 +166,6 @@ def write_config_file(config_data: str, auto_reload: bool = True) -> Optional[Di
         auth = get_web_auth()
         response = requests.put(url, data=config_data.encode('utf-8'), headers=headers, auth=auth, timeout=5)
 
-        print('写入配置文件：', response.status_code)
-        
         if response.status_code in [200, 201, 204]:
             result = {
                 "success": True,
@@ -235,7 +227,6 @@ def query_config(key: Optional[str] = None) -> Optional[Dict[str, Any]]:
         # 如果存在认证信息，使用 auth 参数
         auth = get_web_auth()
         response = requests.get(url, params=params, auth=auth, timeout=5)
-        print('查询配置文件：', response.status_code)
         if response.status_code == 200:
             return response.json()
         else:
@@ -282,8 +273,6 @@ def get_proxy_status() -> Optional[Dict[str, Any]]:
         auth = get_web_auth()
         response = requests.get(url, auth=auth, timeout=5)
 
-        print('查询代理列表：', response.status_code)
-        
         if response.status_code == 200:
             return response.json()
         else:
@@ -310,8 +299,7 @@ def read_frpc_toml_content() -> Optional[str]:
     try:
         with open('frpc.toml', 'r', encoding='utf-8') as f:
             return f.read()
-    except Exception as e:
-        print(f"读取 frpc.toml 文件失败: {e}")
+    except Exception:
         return None
 
 

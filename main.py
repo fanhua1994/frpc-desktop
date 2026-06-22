@@ -1,8 +1,8 @@
 """
 FRPC 桌面客户端
 """
-from setting import init_frpc_config
-from service import show_main_window
+from app.setting import init_frpc_config
+from app.service import show_main_window
 
 
 if __name__ == '__main__':

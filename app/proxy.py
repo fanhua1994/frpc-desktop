@@ -1,8 +1,8 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-from setting import load_frpc_toml, get_port_range, get_web_auth_from_json, get_config_from_json
-from config_api import get_proxy_status, write_config_file, read_frpc_toml_content
-from util import validate_ip_address, validate_port, center_window
+from .setting import load_frpc_toml, get_port_range, get_web_auth_from_json, get_config_from_json
+from .config_api import get_proxy_status, write_config_file, read_frpc_toml_content
+from .util import validate_ip_address, validate_port, center_window
 
 
 def generate_frpc_toml_with_proxies(server_addr, server_port, token=None, web_addr="127.0.0.1", web_port=7400, log_level="info", web_user=None, web_password=None, proxies=None):

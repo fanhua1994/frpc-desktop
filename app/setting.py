@@ -1,9 +1,14 @@
 import os
 import json
-import re
 import tkinter as tk
 from tkinter import messagebox, ttk, filedialog
-from util import validate_ip_address, validate_server_address, validate_port, center_window
+
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
+
+from .util import validate_ip_address, validate_server_address, validate_port, center_window
 
 
 def check_frpc_config():
@@ -169,134 +174,78 @@ def get_web_auth():
     return '', ''
 
 
+def _normalize_proxy(raw_proxy):
+    """将 TOML 解析出的代理条目转换为应用内部格式"""
+    proxy = {}
+    for key in ('name', 'type', 'localIP', 'subdomain'):
+        if key in raw_proxy:
+            proxy[key] = raw_proxy[key]
+    if 'enabled' in raw_proxy:
+        proxy['enabled'] = raw_proxy['enabled']
+    if 'localPort' in raw_proxy:
+        proxy['localPort'] = int(raw_proxy['localPort'])
+    if 'remotePort' in raw_proxy:
+        proxy['remotePort'] = int(raw_proxy['remotePort'])
+    if 'customDomains' in raw_proxy:
+        domains = raw_proxy['customDomains']
+        proxy['customDomains'] = list(domains) if isinstance(domains, list) else [domains]
+    annotations = raw_proxy.get('annotations')
+    if isinstance(annotations, dict) and annotations:
+        proxy['annotations'] = {str(k): str(v) for k, v in annotations.items()}
+    if proxy.get('name') and proxy.get('type'):
+        return proxy
+    return None
+
+
 def load_frpc_toml():
     """加载并解析 frpc.toml 配置文件"""
     if not os.path.exists('frpc.toml'):
         return None
-    
+
     try:
-        with open('frpc.toml', 'r', encoding='utf-8') as f:
-            content = f.read()
-        
+        with open('frpc.toml', 'rb') as f:
+            data = tomllib.load(f)
+
         config = {}
-        
-        # 解析 serverAddr
-        match = re.search(r'serverAddr\s*=\s*"([^"]+)"', content)
-        if match:
-            config['server_addr'] = match.group(1)
-        
-        # 解析 serverPort
-        match = re.search(r'serverPort\s*=\s*(\d+)', content)
-        if match:
-            config['server_port'] = match.group(1)
-        
-        # 解析 auth.token
-        match = re.search(r'auth\.token\s*=\s*"([^"]+)"', content)
-        if match:
-            config['token'] = match.group(1)
-        
-        # 解析 webServer.addr
-        match = re.search(r'webServer\.addr\s*=\s*"([^"]+)"', content)
-        if match:
-            config['web_addr'] = match.group(1)
-        
-        # 解析 webServer.port
-        match = re.search(r'webServer\.port\s*=\s*(\d+)', content)
-        if match:
-            config['web_port'] = match.group(1)
-        
-        # 解析 webServer.user
-        match = re.search(r'webServer\.user\s*=\s*"([^"]+)"', content)
-        if match:
-            config['web_user'] = match.group(1)
-        
-        # 解析 webServer.password
-        match = re.search(r'webServer\.password\s*=\s*"([^"]+)"', content)
-        if match:
-            config['web_password'] = match.group(1)
-        
-        # 解析 log.to
-        match = re.search(r'log\.to\s*=\s*"([^"]+)"', content)
-        if match:
-            config['log_to'] = match.group(1)
-        
-        # 解析 log.level
-        match = re.search(r'log\.level\s*=\s*"([^"]+)"', content)
-        if match:
-            config['log_level'] = match.group(1)
-        
-        # 解析代理配置
+        if data.get('serverAddr') is not None:
+            config['server_addr'] = str(data['serverAddr'])
+        if data.get('serverPort') is not None:
+            config['server_port'] = str(data['serverPort'])
+
+        auth = data.get('auth')
+        if isinstance(auth, dict) and auth.get('token'):
+            config['token'] = auth['token']
+
+        web_server = data.get('webServer')
+        if isinstance(web_server, dict):
+            if web_server.get('addr') is not None:
+                config['web_addr'] = str(web_server['addr'])
+            if web_server.get('port') is not None:
+                config['web_port'] = str(web_server['port'])
+            if web_server.get('user'):
+                config['web_user'] = web_server['user']
+            if web_server.get('password'):
+                config['web_password'] = web_server['password']
+
+        log_config = data.get('log')
+        if isinstance(log_config, dict):
+            if log_config.get('to'):
+                config['log_to'] = log_config['to']
+            if log_config.get('level'):
+                config['log_level'] = log_config['level']
+
         proxies = []
-        # 使用更简单的正则表达式匹配 [[proxies]] 块
-        proxy_blocks = re.split(r'\[\[proxies\]\]', content)
-        
-        for block in proxy_blocks[1:]:  # 跳过第一个（配置头部）
-            proxy = {}
-            
-            # 解析 name
-            name_match = re.search(r'name\s*=\s*"([^"]+)"', block)
-            if name_match:
-                proxy['name'] = name_match.group(1)
-            
-            # 解析 type
-            type_match = re.search(r'type\s*=\s*"([^"]+)"', block)
-            if type_match:
-                proxy['type'] = type_match.group(1)
-            
-            # 解析 enabled
-            enabled_match = re.search(r'enabled\s*=\s*(true|false)', block)
-            if enabled_match:
-                proxy['enabled'] = enabled_match.group(1) == 'true'
-            
-            # 解析 localIP
-            local_ip_match = re.search(r'localIP\s*=\s*"([^"]+)"', block)
-            if local_ip_match:
-                proxy['localIP'] = local_ip_match.group(1)
-            
-            # 解析 localPort
-            local_port_match = re.search(r'localPort\s*=\s*(\d+)', block)
-            if local_port_match:
-                proxy['localPort'] = int(local_port_match.group(1))
-            
-            # 解析 remotePort
-            remote_port_match = re.search(r'remotePort\s*=\s*(\d+)', block)
-            if remote_port_match:
-                proxy['remotePort'] = int(remote_port_match.group(1))
-            
-            # 解析 subdomain
-            subdomain_match = re.search(r'subdomain\s*=\s*"([^"]+)"', block)
-            if subdomain_match:
-                proxy['subdomain'] = subdomain_match.group(1)
-            
-            # 解析 customDomains
-            custom_domains_matches = re.finditer(r'customDomains\s*=\s*\[(.*?)\]', block, re.DOTALL)
-            for match in custom_domains_matches:
-                domains_str = match.group(1)
-                # 解析数组中的字符串
-                domain_list = re.findall(r'"([^"]+)"', domains_str)
-                if domain_list:
-                    proxy['customDomains'] = domain_list
-                    break
-            
-            # 解析 annotations
-            annotations = {}
-            annotation_matches = re.finditer(r'annotations\.([^\s=]+)\s*=\s*"([^"]+)"', block)
-            for ann_match in annotation_matches:
-                key = ann_match.group(1)
-                value = ann_match.group(2)
-                annotations[key] = value
-            if annotations:
-                proxy['annotations'] = annotations
-            
-            if proxy.get('name') and proxy.get('type'):
-                proxies.append(proxy)
-        
+        for raw_proxy in data.get('proxies', []):
+            if isinstance(raw_proxy, dict):
+                proxy = _normalize_proxy(raw_proxy)
+                if proxy:
+                    proxies.append(proxy)
+
         if proxies:
             config['proxies'] = proxies
-        
+
         return config
-    except Exception as e:
-        print(f"解析配置文件失败: {e}")
+    except Exception:
         return None
 
 

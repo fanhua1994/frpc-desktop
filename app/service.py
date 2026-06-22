@@ -2,11 +2,11 @@ import os
 import subprocess
 import tkinter as tk
 from tkinter import ttk, messagebox
-from setting import check_frpc_config, show_settings_window, get_frpc_exe_path, load_frpc_toml
-from proxy import ProxyManager
-from log import LogManager
-from util import center_window
-from config_api import check_frpc_service_status
+from .setting import check_frpc_config, show_settings_window, get_frpc_exe_path, load_frpc_toml
+from .proxy import ProxyManager
+from .log import LogManager
+from .util import center_window
+from .config_api import check_frpc_service_status
 import threading
 
 

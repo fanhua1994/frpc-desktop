@@ -1,0 +1,14 @@
+{
+  "server_addr": "162.14.77.110",
+  "server_port": 7000,
+  "token": "391f8d9e76839b036fef6d9e1993aed0",
+  "web_addr": "127.0.0.1",
+  "web_port": 7400,
+  "web_username": "",
+  "web_password": "",
+  "log_level": "info",
+  "frpc_exe_path": "E:/frp_0.69.1_windows_amd64/frpc.exe",
+  "port_range_min": 1,
+  "port_range_max": 65535,
+  "enable_subdomain": true
+}

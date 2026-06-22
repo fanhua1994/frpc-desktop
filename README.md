@@ -10,7 +10,6 @@
   - 一键启动/停止 FRPC 服务
   - 实时显示服务运行状态
   - 自动检测服务状态
-  ![图片描述](./images/status.png)
 
 - **配置管理**
   - 图形化配置界面
@@ -18,7 +17,6 @@
   - 支持 Web 服务地址和端口配置
   - 支持日志级别配置
   - 自动保存配置到 `frpc.toml`
-  ![图片描述](./images/setting.png)
 
 - **代理管理**
   - 可视化代理列表
@@ -26,14 +24,12 @@
   - 支持多种代理类型：TCP、UDP、HTTP、HTTPS、TCPMux、STCP、SUDP、XTCP
   - 根据代理类型动态显示配置字段
   - 实时同步代理状态
-  ![图片描述](./images/proxy.png)
 
 - **日志查看**
   - 实时日志显示
   - 自动刷新（每2秒）
   - 自动滚动到底部
   - 支持手动刷新和清空日志
-  ![图片描述](./images/log.png)
 
 - **数据验证**
   - IP 地址格式验证
@@ -53,13 +49,13 @@
 
 ```bash
 git clone <repository-url>
-cd frpc-gui
+cd frpc-desktop
 ```
 
 ### 2. 安装依赖
 
 ```bash
-pip install requests
+pip install -r requirements.txt
 ```
 
 ### 3. 准备 FRPC 可执行文件
@@ -161,16 +157,20 @@ remotePort = 6000  # TCP/UDP 类型需要
 ## 项目结构
 
 ```
-frpc-gui/
+frpc-desktop/
 ├── main.py              # 程序入口
-├── service.py            # 主窗口和服务管理
-├── setting.py            # 配置管理界面
-├── proxy.py              # 代理管理界面
-├── config.py             # 配置文件读写和 API 交互
-├── frpc.toml             # FRPC 配置文件
-├── frpc_config.json      # 应用配置文件
-├── frpc.log              # 日志文件
-└── README.md             # 项目说明文档
+├── app/                 # 应用模块
+│   ├── service.py       # 主窗口和服务管理
+│   ├── setting.py       # 配置管理界面
+│   ├── proxy.py         # 代理管理界面
+│   ├── config_api.py    # 配置文件读写和 API 交互
+│   ├── log.py           # 日志查看
+│   └── util.py          # 工具函数（校验、窗口居中）
+├── requirements.txt     # Python 依赖
+├── frpc.toml            # FRPC 配置文件（运行时生成）
+├── frpc_config.json     # 应用配置文件（运行时生成）
+├── frpc.log             # 日志文件（运行时生成）
+└── README.md            # 项目说明文档
 ```
 
 ## 功能模块说明
@@ -196,11 +196,18 @@ frpc-gui/
 - 代理新增/编辑对话框
 - 代理配置验证
 
-### config.py
-- 配置文件读写
-- FRPC Web API 交互
-- 配置重载
+### config_api.py
+- FRPC Web API 交互（`/api/status`、`/api/config`、`/api/reload`）
+- 配置读写与热重载
 - 代理状态查询
+
+### log.py
+- 运行日志查看
+- 自动刷新与清空
+
+### util.py
+- IP/域名/端口格式校验
+- 窗口居中显示
 
 ## 注意事项
 
@@ -250,6 +257,7 @@ A: 请检查：
 - Python 3.7+
 - Tkinter（GUI 框架）
 - Requests（HTTP 请求）
+- tomllib / tomli（TOML 配置解析）
 
 ### 代码规范
 - 遵循 PEP 8 代码规范

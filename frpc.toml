@@ -1,0 +1,22 @@
+serverAddr = "162.14.77.110"
+serverPort = 7000
+
+# 认证配置
+auth.method = "token"
+auth.token = "391f8d9e76839b036fef6d9e1993aed0"
+
+# 监控
+webServer.addr = "127.0.0.1"
+webServer.port = 7400
+
+# 日志配置
+log.to = "frpc.log"
+log.level = "info"
+
+[[proxies]]
+name = "webrtc"
+type = "http"
+enabled = true
+localIP = "127.0.0.1"
+localPort = 80
+subdomain = "webrtc"
