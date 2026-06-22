@@ -333,15 +333,14 @@ def show_settings_window(parent=None):
         root = tk.Toplevel(parent)
         root.transient(parent)
         root.grab_set()
+        root.withdraw()
     else:
         root = tk.Tk()
-    
+        root.withdraw()
+
     root.title("FRPC 配置设置")
     root.geometry("500x650")
     root.resizable(False, False)
-    
-    # 居中显示窗口
-    center_window(root)
     
     # 用于跟踪用户是否保存了配置
     config_saved = [False]  # 使用列表以便在嵌套函数中修改
@@ -665,10 +664,14 @@ def show_settings_window(parent=None):
     if parent:
         # 如果是子窗口，禁用父窗口
         parent.attributes('-disabled', True)
+        center_window(root, 500, 650)
+        root.deiconify()
         root.wait_window()
         return config_saved[0]
     else:
         # 如果是独立窗口，运行主循环
+        center_window(root, 500, 650)
+        root.deiconify()
         root.mainloop()
         return config_saved[0]
 

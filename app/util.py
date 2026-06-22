@@ -112,14 +112,21 @@ def validate_port(port, min_port=1, max_port=65535):
         return False, None
 
 
-def center_window(window):
+def center_window(window, width=None, height=None):
     """
     将窗口居中显示在屏幕上
-    
+
     参数:
         window: Tkinter 窗口对象
+        width: 窗口宽度（可选，已知时可避免闪烁）
+        height: 窗口高度（可选，已知时可避免闪烁）
     """
     window.update_idletasks()
-    x = (window.winfo_screenwidth() // 2) - (window.winfo_width() // 2)
-    y = (window.winfo_screenheight() // 2) - (window.winfo_height() // 2)
-    window.geometry(f"+{x}+{y}")
+    win_width = width if width is not None else window.winfo_width()
+    win_height = height if height is not None else window.winfo_height()
+    x = (window.winfo_screenwidth() // 2) - (win_width // 2)
+    y = (window.winfo_screenheight() // 2) - (win_height // 2)
+    if width is not None and height is not None:
+        window.geometry(f"{width}x{height}+{x}+{y}")
+    else:
+        window.geometry(f"+{x}+{y}")

@@ -17,9 +17,6 @@ class MainWindow:
         self.root.title(f"{APP_NAME} {get_version_display()}")
         self.root.geometry("840x600")
         
-        # 居中显示窗口
-        center_window(self.root)
-        
         # 创建主容器
         main_container = ttk.PanedWindow(root, orient=tk.HORIZONTAL)
         main_container.pack(fill=tk.BOTH, expand=True)
@@ -565,7 +562,10 @@ def show_main_window():
         return False
     
     root = tk.Tk()
-    app = MainWindow(root)
+    root.withdraw()
+    MainWindow(root)
+    center_window(root, 840, 600)
+    root.deiconify()
     root.mainloop()
     return True
 
