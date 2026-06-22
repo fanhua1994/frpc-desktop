@@ -7,13 +7,14 @@ from .proxy import ProxyManager
 from .log import LogManager
 from .util import center_window
 from .config_api import check_frpc_service_status
+from .version import APP_NAME, get_version_display
 import threading
 
 
 class MainWindow:
     def __init__(self, root):
         self.root = root
-        self.root.title("FRPC 客户端")
+        self.root.title(f"{APP_NAME} {get_version_display()}")
         self.root.geometry("840x600")
         
         # 居中显示窗口
@@ -62,7 +63,7 @@ class MainWindow:
         # 菜单标题
         title_label = ttk.Label(
             self.menu_frame,
-            text="FRPC 客户端",
+            text=APP_NAME,
             font=("Arial", 14, "bold")
         )
         title_label.pack(pady=20)
@@ -89,6 +90,15 @@ class MainWindow:
             btn.pack(pady=5, padx=10, fill=tk.X)
             self.menu_buttons.append(btn)
         
+        # 版本信息（固定在菜单底部）
+        version_label = ttk.Label(
+            self.menu_frame,
+            text=get_version_display(),
+            font=("Arial", 9),
+            foreground="gray"
+        )
+        version_label.pack(side=tk.BOTTOM, pady=15)
+
         # 初始化时，如果服务未启动，禁用代理菜单按钮
         self.update_proxy_menu_state()
         # 初始化时，更新设置菜单按钮状态
