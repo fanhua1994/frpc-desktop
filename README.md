@@ -85,10 +85,10 @@ python build_release.py
 也可手动执行（请同步修改版本号，并自行生成/携带 `release_info.json`）：
 
 ```bash
-pyinstaller --onefile --windowed --icon=logo.ico --name frp-desktop-1.0.0 --add-data "logo.ico;." --add-data "release_info.json;." main.py
+pyinstaller --onefile --windowed --icon=logo.ico --name frp-desktop-1.0.1 --add-data "logo.ico;." --add-data "release_info.json;." main.py
 ```
 
-打包结果位于 `dist/frp-desktop-1.0.0.exe`。
+打包结果位于 `dist/frp-desktop-1.0.1.exe`。
 
 ## 使用方法
 
@@ -296,6 +296,16 @@ A: 请检查：
 欢迎提交 Issue 和 Pull Request！
 
 ## 更新日志
+
+### v1.0.1
+- 美化客户端界面：侧边栏导航、卡片式布局与统一主题
+- 设置页支持从 GitHub Releases 选择版本并下载官方 frpc
+- 修复中文环境下复选框显示为 `x` 的问题
+- 窗口应用 `logo.ico` 图标
+- 服务页与侧栏显示版本号和发布时间
+- 新增 `build_release.py`，按 `frp-desktop-{版本号}.exe` 规则打包
+- README 对应功能处加入应用截图
+- 忽略构建产物、本地配置与 `release_info.json`
 
 ### v1.0.0
 - 初始版本发布

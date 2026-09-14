@@ -6,7 +6,7 @@ from datetime import datetime, timezone, timedelta
 from functools import lru_cache
 from typing import Optional
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 APP_NAME = "FRPC 客户端"
 RELEASE_NAME_PREFIX = "frp-desktop"
 RELEASE_INFO_FILE = "release_info.json"
