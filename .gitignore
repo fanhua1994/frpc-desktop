@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Build / packaging
+build/
+dist/
+main.spec
+
+# frp binary & local config
+frp/
+frpc_config.json
+frpc.toml
