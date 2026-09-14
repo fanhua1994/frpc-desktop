@@ -30,6 +30,94 @@ FONT_SUBTITLE = ("Microsoft YaHei UI", 12, "bold")
 FONT_SMALL = ("Microsoft YaHei UI", 9)
 FONT_NAV = ("Microsoft YaHei UI", 11)
 
+# 自定义复选框图片需保持引用，避免被垃圾回收
+_CHECKBOX_IMAGES = []
+
+
+def _build_checkbox_images(root):
+    """绘制简单的方框/对勾图片，避免 clam 主题在中文字体下显示成 x。"""
+    size = 16
+
+    def square(fill, border):
+        img = tk.PhotoImage(width=size, height=size, master=root)
+        for y in range(size):
+            colors = []
+            for x in range(size):
+                if x == 0 or y == 0 or x == size - 1 or y == size - 1:
+                    colors.append(border)
+                else:
+                    colors.append(fill)
+            img.put("{" + " ".join(colors) + "}", to=(0, y))
+        return img
+
+    unchecked = square(COLORS["card"], COLORS["border"])
+    checked = square(COLORS["accent"], COLORS["accent"])
+    white = "#ffffff"
+    check_points = []
+    for i in range(4):
+        check_points.append((3 + i, 8 + i))
+        check_points.append((3 + i, 7 + i))
+    for i in range(7):
+        check_points.append((6 + i, 11 - i))
+        check_points.append((6 + i, 10 - i))
+    for x, y in check_points:
+        if 1 <= x < size - 1 and 1 <= y < size - 1:
+            checked.put(white, (x, y))
+    return unchecked, checked
+
+
+def _apply_checkbutton_style(style, root):
+    """用图片指示器替换 clam 默认的字符勾选标记。"""
+    if "CustomCheck.indicator" not in style.element_names():
+        unchecked, checked = _build_checkbox_images(root)
+        _CHECKBOX_IMAGES[:] = [unchecked, checked]
+        style.element_create(
+            "CustomCheck.indicator",
+            "image",
+            unchecked,
+            ("selected", checked),
+            ("disabled", unchecked),
+            width=18,
+            sticky="w",
+        )
+    style.layout(
+        "TCheckbutton",
+        [
+            (
+                "Checkbutton.padding",
+                {
+                    "sticky": "nswe",
+                    "children": [
+                        ("CustomCheck.indicator", {"side": "left", "sticky": ""}),
+                        (
+                            "Checkbutton.focus",
+                            {
+                                "side": "left",
+                                "sticky": "w",
+                                "children": [
+                                    ("Checkbutton.label", {"sticky": "nswe"}),
+                                ],
+                            },
+                        ),
+                    ],
+                },
+            )
+        ],
+    )
+    style.configure(
+        "TCheckbutton",
+        background=COLORS["bg"],
+        foreground=COLORS["text"],
+        font=FONT_UI,
+        padding=2,
+        focusthickness=0,
+    )
+    style.map(
+        "TCheckbutton",
+        background=[("active", COLORS["bg"]), ("selected", COLORS["bg"])],
+        foreground=[("disabled", COLORS["muted"])],
+    )
+
 
 def apply_theme(root):
     """为窗口应用全局 ttk 主题"""
@@ -138,12 +226,7 @@ def apply_theme(root):
         arrowsize=14,
     )
 
-    style.configure(
-        "TCheckbutton",
-        background=COLORS["bg"],
-        foreground=COLORS["text"],
-        font=FONT_UI,
-    )
+    _apply_checkbutton_style(style, root)
 
     style.configure(
         "TNotebook",

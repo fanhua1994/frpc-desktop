@@ -11,7 +11,13 @@ except ImportError:
 
 from .downloader import detect_windows_arch, download_frpc, fetch_releases
 from .theme import COLORS, apply_theme
-from .util import validate_ip_address, validate_server_address, validate_port, center_window
+from .util import (
+    apply_window_icon,
+    validate_ip_address,
+    validate_server_address,
+    validate_port,
+    center_window,
+)
 
 
 def check_frpc_config():
@@ -466,6 +472,7 @@ def show_settings_window(parent=None):
         root.withdraw()
 
     apply_theme(root)
+    apply_window_icon(root)
     root.title("FRPC 配置设置")
     root.geometry("560x760")
     root.resizable(False, False)

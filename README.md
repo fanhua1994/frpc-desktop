@@ -11,12 +11,16 @@
   - 实时显示服务运行状态
   - 自动检测服务状态
 
+  ![服务状态](images/status.png)
+
 - **配置管理**
   - 图形化配置界面
   - 支持服务器地址、端口、Token 等基础配置
   - 支持 Web 服务地址和端口配置
   - 支持日志级别配置
   - 自动保存配置到 `frpc.toml`
+
+  ![配置设置](images/setting.png)
 
 - **代理管理**
   - 可视化代理列表
@@ -25,11 +29,15 @@
   - 根据代理类型动态显示配置字段
   - 实时同步代理状态
 
+  ![代理配置](images/proxy.png)
+
 - **日志查看**
   - 实时日志显示
   - 自动刷新（每2秒）
   - 自动滚动到底部
   - 支持手动刷新和清空日志
+
+  ![运行日志](images/log.png)
 
 - **数据验证**
   - IP 地址格式验证
@@ -62,11 +70,25 @@ pip install -r requirements.txt
 
 确保您有 FRPC 的可执行文件（`frpc.exe`），可以从 [FRP 官方仓库](https://github.com/fatedier/frp) 下载。
 
-### 4. 打包exe
+### 4. 打包 exe
 
+发布包命名规则：`frp-desktop-{版本号}.exe`（版本号来自 `app/version.py`），并嵌入 `logo.ico`。
+
+推荐使用发布脚本：
+
+```bash
+python build_release.py
 ```
-pyinstaller --onefile --windowed --icon=logo.ico main.py
+
+脚本会在打包前写入 `release_info.json`（版本号与发布时间），并随 exe 一并打包。打开应用后，「服务」页顶部和左侧栏底部会显示版本号和发布时间。
+
+也可手动执行（请同步修改版本号，并自行生成/携带 `release_info.json`）：
+
+```bash
+pyinstaller --onefile --windowed --icon=logo.ico --name frp-desktop-1.0.0 --add-data "logo.ico;." --add-data "release_info.json;." main.py
 ```
+
+打包结果位于 `dist/frp-desktop-1.0.0.exe`。
 
 ## 使用方法
 
@@ -167,6 +189,7 @@ frpc-desktop/
 │   ├── log.py           # 日志查看
 │   └── util.py          # 工具函数（校验、窗口居中）
 ├── requirements.txt     # Python 依赖
+├── images/              # 应用截图
 ├── frpc.toml            # FRPC 配置文件（运行时生成）
 ├── frpc_config.json     # 应用配置文件（运行时生成）
 ├── frpc.log             # 日志文件（运行时生成）

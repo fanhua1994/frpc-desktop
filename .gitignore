@@ -6,6 +6,7 @@ __pycache__/
 build/
 dist/
 main.spec
+release_info.json
 
 # frp binary & local config
 frp/

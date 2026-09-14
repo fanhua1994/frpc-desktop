@@ -1,5 +1,28 @@
+import os
 import re
+import sys
 import tkinter as tk
+
+
+def resource_path(relative_path):
+    """获取资源文件路径，兼容开发环境和 PyInstaller 打包后的路径"""
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        base_path = sys._MEIPASS
+    else:
+        base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    return os.path.join(base_path, relative_path)
+
+
+def apply_window_icon(window, icon_name="logo.ico"):
+    """为窗口设置应用图标"""
+    icon_path = resource_path(icon_name)
+    if not os.path.exists(icon_path):
+        return
+    try:
+        window.iconbitmap(icon_path)
+    except tk.TclError:
+        pass
+
 
 
 def validate_ip_address(ip):

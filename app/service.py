@@ -6,16 +6,21 @@ from .setting import check_frpc_config, show_settings_window, get_frpc_exe_path,
 from .proxy import ProxyManager
 from .log import LogManager
 from .theme import COLORS, FONT_SMALL, FONT_UI, NavButton, apply_theme, create_card
-from .util import center_window
+from .util import apply_window_icon, center_window
 from .config_api import check_frpc_service_status
-from .version import APP_NAME, get_version_display
+from .version import (
+    APP_NAME,
+    get_release_time_display,
+    get_version_detail_display,
+    get_version_display,
+)
 import threading
 
 
 class MainWindow:
     def __init__(self, root):
         self.root = root
-        self.root.title(f"{APP_NAME} {get_version_display()}")
+        self.root.title(APP_NAME)
         self.root.geometry("980x640")
         self.root.minsize(880, 560)
         apply_theme(self.root)
@@ -95,10 +100,11 @@ class MainWindow:
 
         version_label = tk.Label(
             self.menu_frame,
-            text=get_version_display(),
+            text=get_version_detail_display(),
             font=FONT_SMALL,
             bg=COLORS["sidebar"],
             fg=COLORS["sidebar_muted"],
+            justify=tk.CENTER,
         )
         version_label.pack(side=tk.BOTTOM, pady=18)
 
@@ -124,6 +130,29 @@ class MainWindow:
         
         status_frame = tk.Frame(self.content_frame, bg=COLORS["bg"])
         status_frame.pack(fill=tk.BOTH, expand=True, padx=28, pady=24)
+
+        version_card, version_body = create_card(status_frame, padding=16)
+        version_card.pack(fill=tk.X, pady=(0, 16))
+        version_row = tk.Frame(version_body, bg=COLORS["card"])
+        version_row.pack(fill=tk.X)
+        tk.Label(
+            version_row,
+            text=get_version_display(),
+            font=("Microsoft YaHei UI", 16, "bold"),
+            bg=COLORS["card"],
+            fg=COLORS["accent"],
+            anchor="w",
+        ).pack(side=tk.LEFT)
+        released_at = get_release_time_display()
+        release_text = f"发布于 {released_at}" if released_at else "开发运行（尚未写入发布时间）"
+        tk.Label(
+            version_row,
+            text=release_text,
+            font=FONT_UI,
+            bg=COLORS["card"],
+            fg=COLORS["muted"],
+            anchor="e",
+        ).pack(side=tk.RIGHT)
 
         ttk.Label(status_frame, text="服务状态", style="Title.TLabel").pack(anchor=tk.W)
         ttk.Label(
@@ -602,6 +631,7 @@ def show_main_window():
     
     root = tk.Tk()
     root.withdraw()
+    apply_window_icon(root)
     apply_theme(root)
     MainWindow(root)
     center_window(root, 980, 640)
