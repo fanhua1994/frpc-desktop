@@ -1,5 +1,6 @@
 import os
 import json
+import threading
 import tkinter as tk
 from tkinter import messagebox, ttk, filedialog
 
@@ -8,6 +9,8 @@ try:
 except ImportError:
     import tomli as tomllib
 
+from .downloader import detect_windows_arch, download_frpc, fetch_releases
+from .theme import COLORS, apply_theme
 from .util import validate_ip_address, validate_server_address, validate_port, center_window
 
 
@@ -319,6 +322,130 @@ log.level = "{log_level}"
     return True
 
 
+def _attach_frpc_download_panel(parent, path_entry):
+    """在设置页中加入官方 frpc 版本选择与下载"""
+    panel = tk.Frame(parent, bg=COLORS["card"])
+    panel.grid(row=9, column=0, columnspan=2, sticky=tk.EW, pady=(12, 4))
+    parent.grid_columnconfigure(1, weight=1)
+
+    ttk.Label(panel, text="官方客户端", style="CardTitle.TLabel").pack(anchor=tk.W)
+
+    hint = ttk.Label(
+        panel,
+        text=f"从 GitHub Releases 下载 frpc.exe（当前架构：{detect_windows_arch()}）",
+        style="CardMuted.TLabel",
+    )
+    hint.pack(anchor=tk.W, pady=(2, 10))
+
+    row = tk.Frame(panel, bg=COLORS["card"])
+    row.pack(fill=tk.X)
+
+    ttk.Label(row, text="版本:", style="Card.TLabel").pack(side=tk.LEFT)
+    version_combo = ttk.Combobox(row, width=18, state="readonly")
+    version_combo.pack(side=tk.LEFT, padx=(8, 8))
+
+    status_var = tk.StringVar(value="正在获取版本列表...")
+    progress = ttk.Progressbar(panel, mode="determinate", maximum=100)
+
+    def set_status(text):
+        status_var.set(text)
+
+    def ui_call(fn):
+        def runner():
+            try:
+                if parent.winfo_exists():
+                    fn()
+            except tk.TclError:
+                pass
+        try:
+            parent.after(0, runner)
+        except tk.TclError:
+            pass
+
+    def fill_versions(releases, warning):
+        tags = []
+        for item in releases or []:
+            if item.get("prerelease"):
+                continue
+            tags.append(item["tag"])
+        if not tags:
+            tags = [item["tag"] for item in (releases or [])]
+        if tags:
+            version_combo["values"] = tags
+            version_combo.set(tags[0])
+            set_status(warning or f"已加载 {len(tags)} 个版本")
+            return
+        version_combo["values"] = ()
+        set_status(warning or "未获取到版本")
+
+    def refresh_versions():
+        set_status("正在获取版本列表...")
+        refresh_btn.config(state=tk.DISABLED)
+
+        def worker():
+            releases, error = fetch_releases()
+            ui_call(lambda: fill_versions(releases, error))
+            ui_call(lambda: refresh_btn.config(state=tk.NORMAL))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def start_download():
+        tag = version_combo.get().strip()
+        if not tag:
+            messagebox.showwarning("提示", "请先选择要下载的版本")
+            return
+
+        download_btn.config(state=tk.DISABLED)
+        refresh_btn.config(state=tk.DISABLED)
+        progress.pack(fill=tk.X, pady=(8, 0))
+        progress["value"] = 0
+        set_status(f"正在下载 {tag} ...")
+
+        last_progress = [0]
+
+        def on_progress(downloaded, total):
+            if total > 0:
+                percent = min(100, int(downloaded * 100 / total))
+                if percent < 100 and percent - last_progress[0] < 3:
+                    return
+                last_progress[0] = percent
+                ui_call(lambda p=percent: progress.config(value=p))
+                ui_call(lambda p=percent: set_status(f"正在下载 {tag} ... {p}%"))
+            else:
+                mb = downloaded / (1024 * 1024)
+                ui_call(lambda m=mb: set_status(f"正在下载 {tag} ... {m:.1f} MB"))
+
+        def worker():
+            exe_path, error = download_frpc(tag, dest_dir="frp", progress_callback=on_progress)
+
+            def done():
+                download_btn.config(state=tk.NORMAL)
+                refresh_btn.config(state=tk.NORMAL)
+                if error:
+                    set_status(error)
+                    messagebox.showerror("下载失败", error)
+                    return
+                path_entry.delete(0, tk.END)
+                path_entry.insert(0, exe_path)
+                save_frpc_exe_path(exe_path)
+                progress["value"] = 100
+                set_status(f"已安装 {tag}：{exe_path}")
+                messagebox.showinfo("成功", f"已下载 {tag}\n路径：{exe_path}\n请点击下方保存以写入完整配置。")
+
+            ui_call(done)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    refresh_btn = ttk.Button(row, text="刷新", command=refresh_versions)
+    refresh_btn.pack(side=tk.LEFT, padx=(0, 8))
+    download_btn = ttk.Button(row, text="下载并安装", style="Accent.TButton", command=start_download)
+    download_btn.pack(side=tk.LEFT)
+
+    ttk.Label(panel, textvariable=status_var, style="CardMuted.TLabel").pack(anchor=tk.W, pady=(8, 0))
+    parent.after(200, refresh_versions)
+    return panel
+
+
 def show_settings_window(parent=None):
     """
     显示设置窗口
@@ -338,16 +465,30 @@ def show_settings_window(parent=None):
         root = tk.Tk()
         root.withdraw()
 
+    apply_theme(root)
     root.title("FRPC 配置设置")
-    root.geometry("500x650")
+    root.geometry("560x760")
     root.resizable(False, False)
+    root.configure(bg=COLORS["bg"])
     
     # 用于跟踪用户是否保存了配置
     config_saved = [False]  # 使用列表以便在嵌套函数中修改
     
-    # 创建输入框和标签
-    frame = ttk.Frame(root, padding="20")
+    outer = ttk.Frame(root, padding="16")
+    outer.pack(fill=tk.BOTH, expand=True)
+
+    notebook = ttk.Notebook(outer)
+    notebook.pack(fill=tk.BOTH, expand=True)
+
+    server_tab = tk.Frame(notebook, bg=COLORS["card"])
+    client_tab = tk.Frame(notebook, bg=COLORS["card"])
+    notebook.add(server_tab, text="  服务器  ")
+    notebook.add(client_tab, text="  客户端  ")
+
+    frame = ttk.Frame(server_tab, padding="18")
     frame.pack(fill=tk.BOTH, expand=True)
+    client_frame = ttk.Frame(client_tab, padding="18")
+    client_frame.pack(fill=tk.BOTH, expand=True)
     
     # 加载现有配置
     existing_config = load_frpc_toml()
@@ -470,19 +611,18 @@ def show_settings_window(parent=None):
     
     ttk.Label(port_range_frame, text=" (1-65535)").pack(side=tk.LEFT, padx=(5, 0))
     
-    # FRPC.exe 路径
-    ttk.Label(frame, text="FRPC.exe 路径:").grid(row=9, column=0, sticky=tk.W, pady=5)
-    frpc_path_frame = ttk.Frame(frame)
-    frpc_path_frame.grid(row=9, column=1, pady=5, padx=10, sticky=tk.EW)
-    
-    frpc_path_entry = ttk.Entry(frpc_path_frame, width=25)
+    ttk.Label(client_frame, text="FRPC.exe 路径:").grid(row=0, column=0, sticky=tk.W, pady=5)
+    frpc_path_frame = ttk.Frame(client_frame)
+    frpc_path_frame.grid(row=0, column=1, pady=5, padx=10, sticky=tk.EW)
+    client_frame.grid_columnconfigure(1, weight=1)
+
+    frpc_path_entry = ttk.Entry(frpc_path_frame, width=32)
     frpc_path_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
-    
-    # 加载已保存的路径（从 frpc_config.json 读取）
+
     saved_path = get_config_from_json('frpc_exe_path', '')
     if saved_path:
         frpc_path_entry.insert(0, saved_path)
-    
+
     def browse_frpc_exe():
         """浏览选择 frpc.exe 文件"""
         file_path = filedialog.askopenfilename(
@@ -492,16 +632,17 @@ def show_settings_window(parent=None):
         if file_path:
             frpc_path_entry.delete(0, tk.END)
             frpc_path_entry.insert(0, file_path)
-    
+
     browse_button = ttk.Button(frpc_path_frame, text="浏览", command=browse_frpc_exe)
     browse_button.pack(side=tk.LEFT, padx=(5, 0))
 
-    # 是否开启子域名（控制代理弹窗中是否显示“子域名”选项）
-    ttk.Label(frame, text="是否开启子域名:").grid(row=10, column=0, sticky=tk.W, pady=5)
+    _attach_frpc_download_panel(client_frame, frpc_path_entry)
+
+    ttk.Label(frame, text="是否开启子域名:").grid(row=9, column=0, sticky=tk.W, pady=5)
     enable_subdomain_var = tk.BooleanVar()
     enable_subdomain_var.set(bool(get_config_from_json('enable_subdomain', False)))
     enable_subdomain_check = ttk.Checkbutton(frame, variable=enable_subdomain_var)
-    enable_subdomain_check.grid(row=10, column=1, pady=5, padx=10, sticky=tk.W)
+    enable_subdomain_check.grid(row=9, column=1, pady=5, padx=10, sticky=tk.W)
     
     def save_config():
         """保存配置"""
@@ -646,9 +787,8 @@ def show_settings_window(parent=None):
             root.quit()
             root.destroy()
     
-    # 按钮框架
-    button_frame = ttk.Frame(frame)
-    button_frame.grid(row=11, column=0, columnspan=2, pady=20)
+    button_frame = ttk.Frame(outer)
+    button_frame.pack(pady=(12, 0))
     
     # 保存按钮
     save_button = ttk.Button(button_frame, text="保存", command=save_config)
@@ -664,13 +804,13 @@ def show_settings_window(parent=None):
     if parent:
         # 如果是子窗口，禁用父窗口
         parent.attributes('-disabled', True)
-        center_window(root, 500, 650)
+        center_window(root, 560, 760)
         root.deiconify()
         root.wait_window()
         return config_saved[0]
     else:
         # 如果是独立窗口，运行主循环
-        center_window(root, 500, 650)
+        center_window(root, 560, 760)
         root.deiconify()
         root.mainloop()
         return config_saved[0]

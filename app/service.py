@@ -5,6 +5,7 @@ from tkinter import ttk, messagebox
 from .setting import check_frpc_config, show_settings_window, get_frpc_exe_path, load_frpc_toml
 from .proxy import ProxyManager
 from .log import LogManager
+from .theme import COLORS, FONT_SMALL, FONT_UI, NavButton, apply_theme, create_card
 from .util import center_window
 from .config_api import check_frpc_service_status
 from .version import APP_NAME, get_version_display
@@ -15,19 +16,20 @@ class MainWindow:
     def __init__(self, root):
         self.root = root
         self.root.title(f"{APP_NAME} {get_version_display()}")
-        self.root.geometry("840x600")
-        
-        # 创建主容器
-        main_container = ttk.PanedWindow(root, orient=tk.HORIZONTAL)
+        self.root.geometry("980x640")
+        self.root.minsize(880, 560)
+        apply_theme(self.root)
+        self.root.configure(bg=COLORS["bg"])
+
+        main_container = tk.Frame(root, bg=COLORS["bg"])
         main_container.pack(fill=tk.BOTH, expand=True)
-        
-        # 左侧菜单栏
-        self.menu_frame = ttk.Frame(main_container, width=200)
-        main_container.add(self.menu_frame, weight=0)
-        
-        # 右侧内容区域
-        self.content_frame = ttk.Frame(main_container)
-        main_container.add(self.content_frame, weight=1)
+
+        self.menu_frame = tk.Frame(main_container, width=220, bg=COLORS["sidebar"])
+        self.menu_frame.pack(side=tk.LEFT, fill=tk.Y)
+        self.menu_frame.pack_propagate(False)
+
+        self.content_frame = tk.Frame(main_container, bg=COLORS["bg"])
+        self.content_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         
         # 初始化内容区域和进程对象（需要在 init_menu 之前初始化）
         self.current_page = None
@@ -57,48 +59,50 @@ class MainWindow:
     
     def init_menu(self):
         """初始化左侧菜单"""
-        # 菜单标题
-        title_label = ttk.Label(
-            self.menu_frame,
+        brand = tk.Frame(self.menu_frame, bg=COLORS["sidebar"])
+        brand.pack(fill=tk.X, padx=20, pady=(28, 18))
+        tk.Label(
+            brand,
             text=APP_NAME,
-            font=("Arial", 14, "bold")
-        )
-        title_label.pack(pady=20)
-        
-        # 分隔线
-        ttk.Separator(self.menu_frame, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=10, pady=10)
-        
-        # 菜单按钮
+            font=("Microsoft YaHei UI", 14, "bold"),
+            bg=COLORS["sidebar"],
+            fg="#ffffff",
+            anchor="w",
+        ).pack(fill=tk.X)
+        tk.Label(
+            brand,
+            text="内网穿透桌面客户端",
+            font=FONT_SMALL,
+            bg=COLORS["sidebar"],
+            fg=COLORS["sidebar_muted"],
+            anchor="w",
+        ).pack(fill=tk.X, pady=(4, 0))
+
+        tk.Frame(self.menu_frame, bg="#2a3040", height=1).pack(fill=tk.X, padx=16, pady=(0, 12))
+
         menu_items = [
             ("服务", self.show_status_page),
             ("代理", self.show_proxy_page),
             ("日志", self.show_log_page),
             ("设置", self.show_settings_page),
         ]
-        
+
         self.menu_buttons = []
-        for i, (text, command) in enumerate(menu_items):
-            btn = ttk.Button(
-                self.menu_frame,
-                text=text,
-                command=command,
-                width=20
-            )
-            btn.pack(pady=5, padx=10, fill=tk.X)
+        for text, command in menu_items:
+            btn = NavButton(self.menu_frame, text, command)
+            btn.pack(fill=tk.X, padx=8, pady=2)
             self.menu_buttons.append(btn)
-        
-        # 版本信息（固定在菜单底部）
-        version_label = ttk.Label(
+
+        version_label = tk.Label(
             self.menu_frame,
             text=get_version_display(),
-            font=("Arial", 9),
-            foreground="gray"
+            font=FONT_SMALL,
+            bg=COLORS["sidebar"],
+            fg=COLORS["sidebar_muted"],
         )
-        version_label.pack(side=tk.BOTTOM, pady=15)
+        version_label.pack(side=tk.BOTTOM, pady=18)
 
-        # 初始化时，如果服务未启动，禁用代理菜单按钮
         self.update_proxy_menu_state()
-        # 初始化时，更新设置菜单按钮状态
         self.update_settings_menu_state()
     
     def clear_content(self):
@@ -118,65 +122,81 @@ class MainWindow:
         # 更新菜单按钮状态
         self.update_menu_highlight(0)
         
-        # 状态页面内容
-        status_frame = ttk.Frame(self.content_frame, padding="20")
-        status_frame.pack(fill=tk.BOTH, expand=True)
-        
-        # 标题
-        title_label = ttk.Label(
+        status_frame = tk.Frame(self.content_frame, bg=COLORS["bg"])
+        status_frame.pack(fill=tk.BOTH, expand=True, padx=28, pady=24)
+
+        ttk.Label(status_frame, text="服务状态", style="Title.TLabel").pack(anchor=tk.W)
+        ttk.Label(
             status_frame,
-            text="服务状态",
-            font=("Arial", 16, "bold")
+            text="启动或停止 FRPC，并查看当前运行情况",
+            style="Muted.TLabel",
+        ).pack(anchor=tk.W, pady=(4, 18))
+
+        card_wrap, info_frame = create_card(status_frame, padding=28)
+        card_wrap.pack(fill=tk.BOTH, expand=True)
+
+        header = tk.Frame(info_frame, bg=COLORS["card"])
+        header.pack(fill=tk.X)
+
+        self.status_dot = tk.Canvas(
+            header, width=14, height=14, bg=COLORS["card"], highlightthickness=0
         )
-        title_label.pack(pady=20)
-        
-        # 状态信息区域
-        info_frame = ttk.LabelFrame(status_frame, text="状态信息", padding="15")
-        info_frame.pack(fill=tk.BOTH, expand=True, pady=20)
-        
-        # 状态显示
-        self.status_label = ttk.Label(
+        self.status_dot.pack(side=tk.LEFT)
+        self._draw_status_dot(COLORS["muted"])
+
+        self.status_label = tk.Label(
+            header,
+            text="未启动",
+            font=("Microsoft YaHei UI", 18, "bold"),
+            bg=COLORS["card"],
+            fg=COLORS["text"],
+        )
+        self.status_label.pack(side=tk.LEFT, padx=(10, 0))
+
+        self.status_hint = tk.Label(
             info_frame,
-            text="状态: 未启动",
-            font=("Arial", 12)
+            text="服务尚未运行，配置完成后即可启动。",
+            font=FONT_UI,
+            bg=COLORS["card"],
+            fg=COLORS["muted"],
+            anchor="w",
+            justify=tk.LEFT,
         )
-        self.status_label.pack(pady=10)
-        
-        # 加载进度条（初始隐藏）
-        self.progress_frame = ttk.Frame(info_frame)
+        self.status_hint.pack(fill=tk.X, pady=(12, 0))
+
+        self.progress_frame = tk.Frame(info_frame, bg=COLORS["card"])
         self.progress_bar = ttk.Progressbar(
             self.progress_frame,
-            mode='indeterminate',
-            length=200
+            mode="indeterminate",
+            length=280,
         )
-        self.progress_label = ttk.Label(
+        self.progress_label = tk.Label(
             self.progress_frame,
             text="处理中...",
-            font=("Arial", 10)
+            font=FONT_UI,
+            bg=COLORS["card"],
+            fg=COLORS["muted"],
         )
-        
-        # 按钮区域
-        button_frame = ttk.Frame(status_frame)
-        button_frame.pack(pady=30)
-        
-        # 启动按钮
+
+        button_frame = tk.Frame(info_frame, bg=COLORS["card"])
+        button_frame.pack(pady=(28, 0), anchor=tk.W)
+
         self.start_button = ttk.Button(
             button_frame,
-            text="启动",
+            text="启动服务",
             command=self.start_frpc,
-            width=15
+            style="Accent.TButton",
         )
-        self.start_button.pack(side=tk.LEFT, padx=10)
-        
-        # 停止按钮
+        self.start_button.pack(side=tk.LEFT, padx=(0, 10))
+
         self.stop_button = ttk.Button(
             button_frame,
-            text="停止",
+            text="停止服务",
             command=self.stop_frpc,
-            width=15,
-            state=tk.DISABLED
+            style="Danger.TButton",
+            state=tk.DISABLED,
         )
-        self.stop_button.pack(side=tk.LEFT, padx=10)
+        self.stop_button.pack(side=tk.LEFT)
         
         # 根据实际服务状态更新 UI
         self.update_status_ui()
@@ -217,19 +237,28 @@ class MainWindow:
             messagebox.showwarning("提示", "请先停止 FRPC 服务才能打开设置")
             return
         
-        # 更新菜单按钮状态
-        self.update_menu_highlight(3)
-        
-        # 直接调用 setting.py 中的设置窗口（支持父窗口）
         show_settings_window(self.root)
+        page_index = {"status": 0, "proxy": 1, "log": 2}
+        if self.current_page in page_index:
+            self.update_menu_highlight(page_index[self.current_page])
     
     def update_menu_highlight(self, active_index):
         """更新菜单按钮高亮状态"""
         for i, btn in enumerate(self.menu_buttons):
-            if i == active_index:
-                btn.configure(style="Accent.TButton")
-            else:
-                btn.configure(style="TButton")
+            btn.set_active(i == active_index)
+
+    def _draw_status_dot(self, color):
+        if not hasattr(self, "status_dot") or self.status_dot is None:
+            return
+        self.status_dot.delete("all")
+        self.status_dot.create_oval(2, 2, 12, 12, fill=color, outline=color)
+
+    def _set_status_text(self, title, hint, color):
+        if hasattr(self, "status_label") and self.status_label:
+            self.status_label.config(text=title, fg=color)
+        if hasattr(self, "status_hint") and self.status_hint:
+            self.status_hint.config(text=hint)
+        self._draw_status_dot(color)
     
     def is_service_running(self):
         """检查服务是否正在运行"""
@@ -263,7 +292,11 @@ class MainWindow:
         # 检测到服务在运行，更新 UI 状态
         # 注意：不设置 self.frpc_process，因为不是我们启动的进程
         if hasattr(self, 'status_label') and self.status_label:
-            self.status_label.config(text="状态: 运行中（外部启动）")
+            self._set_status_text(
+                "运行中（外部启动）",
+                "检测到已有 FRPC 进程在运行，当前窗口不会接管该进程。",
+                COLORS["warning"],
+            )
             if hasattr(self, 'start_button') and self.start_button:
                 self.start_button.config(state=tk.DISABLED)
             if hasattr(self, 'stop_button') and self.stop_button:
@@ -278,31 +311,33 @@ class MainWindow:
         """更新代理菜单按钮的启用/禁用状态"""
         if len(self.menu_buttons) > 1:
             proxy_button = self.menu_buttons[1]  # 代理按钮是第二个（索引为1）
-            if self.is_service_running():
-                proxy_button.config(state=tk.NORMAL)
-            else:
-                proxy_button.config(state=tk.DISABLED)
+            proxy_button.set_enabled(self.is_service_running())
     
     def update_settings_menu_state(self):
         """更新设置菜单按钮的启用/禁用状态"""
         if len(self.menu_buttons) > 3:
             settings_button = self.menu_buttons[3]  # 设置按钮是第四个（索引为3）
-            if self.is_service_running():
-                settings_button.config(state=tk.DISABLED)
-            else:
-                settings_button.config(state=tk.NORMAL)
+            settings_button.set_enabled(not self.is_service_running())
     
     def update_status_ui(self):
         """根据实际服务状态更新状态页面的 UI"""
         if not hasattr(self, 'status_label') or self.status_label is None:
             return
         
-        if self.is_service_running():
-            self.status_label.config(text="状态: 运行中")
+        if self.frpc_process is not None and self.frpc_process.poll() is None:
+            self._set_status_text("运行中", "FRPC 服务已启动，可以管理代理。", COLORS["success"])
             self.start_button.config(state=tk.DISABLED)
             self.stop_button.config(state=tk.NORMAL)
+        elif self.is_service_running():
+            self._set_status_text(
+                "运行中（外部启动）",
+                "检测到已有 FRPC 进程在运行，当前窗口不会接管该进程。",
+                COLORS["warning"],
+            )
+            self.start_button.config(state=tk.DISABLED)
+            self.stop_button.config(state=tk.DISABLED)
         else:
-            self.status_label.config(text="状态: 未启动")
+            self._set_status_text("未启动", "服务尚未运行，配置完成后即可启动。", COLORS["muted"])
             self.start_button.config(state=tk.NORMAL)
             self.stop_button.config(state=tk.DISABLED)
     
@@ -314,7 +349,7 @@ class MainWindow:
         self.progress_label.config(text=message)
         self.progress_label.pack(side=tk.LEFT, padx=(0, 10))
         self.progress_bar.pack(side=tk.LEFT)
-        self.progress_frame.pack(pady=10)
+        self.progress_frame.pack(pady=(16, 0), anchor=tk.W)
         self.progress_bar.start(10)  # 开始动画
         
         # 禁用按钮
@@ -341,7 +376,11 @@ class MainWindow:
         # 获取 frpc.exe 路径
         frpc_exe_path = get_frpc_exe_path()
         if not frpc_exe_path or not os.path.exists(frpc_exe_path):
-            messagebox.showerror("错误", "frpc.exe客户端不存在")
+            if messagebox.askyesno(
+                "未找到客户端",
+                "未找到 frpc.exe。\n是否打开设置，从 GitHub Releases 选择版本下载？",
+            ):
+                show_settings_window(self.root)
             return
         
         # 检查进程是否已经在运行
@@ -412,7 +451,7 @@ class MainWindow:
         self.hide_loading()
         
         # 更新 UI
-        self.status_label.config(text="状态: 运行中")
+        self._set_status_text("运行中", "FRPC 服务已启动，可以管理代理。", COLORS["success"])
         self.start_button.config(state=tk.DISABLED)
         self.stop_button.config(state=tk.NORMAL)
         
@@ -430,7 +469,7 @@ class MainWindow:
         if self.frpc_process:
             self.frpc_process = None
         
-        self.status_label.config(text="状态: 启动失败")
+        self._set_status_text("启动失败", "请检查配置、客户端路径和服务器连通性。", COLORS["danger"])
         self.start_button.config(state=tk.NORMAL)
         self.stop_button.config(state=tk.DISABLED)
         
@@ -499,7 +538,7 @@ class MainWindow:
         self.hide_loading()
         
         # 更新 UI
-        self.status_label.config(text="状态: 已停止")
+        self._set_status_text("已停止", "服务已停止，可以修改设置或重新启动。", COLORS["muted"])
         self.start_button.config(state=tk.NORMAL)
         self.stop_button.config(state=tk.DISABLED)
         
@@ -518,7 +557,7 @@ class MainWindow:
         """停止失败的回调"""
         self.hide_loading()
         
-        self.status_label.config(text="状态: 已停止")
+        self._set_status_text("已停止", "停止过程出现异常，请确认进程是否仍在运行。", COLORS["warning"])
         self.start_button.config(state=tk.NORMAL)
         self.stop_button.config(state=tk.DISABLED)
         
@@ -563,8 +602,9 @@ def show_main_window():
     
     root = tk.Tk()
     root.withdraw()
+    apply_theme(root)
     MainWindow(root)
-    center_window(root, 840, 600)
+    center_window(root, 980, 640)
     root.deiconify()
     root.mainloop()
     return True

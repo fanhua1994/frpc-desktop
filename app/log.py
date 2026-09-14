@@ -1,6 +1,7 @@
 import os
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
+from .theme import COLORS, create_card
 
 
 class LogManager:
@@ -19,55 +20,48 @@ class LogManager:
         self.clear_log_page()
         
         # 日志页面内容
-        log_frame = ttk.Frame(self.content_frame, padding="20")
-        log_frame.pack(fill=tk.BOTH, expand=True)
-        
-        # 标题和按钮区域
-        header_frame = ttk.Frame(log_frame)
-        header_frame.pack(fill=tk.X, pady=(0, 10))
-        
-        title_label = ttk.Label(
-            header_frame,
-            text="运行日志",
-            font=("Arial", 16, "bold")
-        )
-        title_label.pack(side=tk.LEFT)
-        
-        # 按钮区域（右侧）
-        button_frame = ttk.Frame(header_frame)
+        log_frame = tk.Frame(self.content_frame, bg=COLORS["bg"])
+        log_frame.pack(fill=tk.BOTH, expand=True, padx=28, pady=24)
+
+        header_frame = tk.Frame(log_frame, bg=COLORS["bg"])
+        header_frame.pack(fill=tk.X, pady=(0, 16))
+
+        title_box = tk.Frame(header_frame, bg=COLORS["bg"])
+        title_box.pack(side=tk.LEFT)
+        ttk.Label(title_box, text="运行日志", style="Title.TLabel").pack(anchor=tk.W)
+        ttk.Label(title_box, text="实时查看 frpc.log", style="Muted.TLabel").pack(anchor=tk.W, pady=(4, 0))
+
+        button_frame = tk.Frame(header_frame, bg=COLORS["bg"])
         button_frame.pack(side=tk.RIGHT)
-        
-        # 清空按钮
+
         clear_button = ttk.Button(
             button_frame,
             text="清空",
             command=self.clear_log,
-            width=10
         )
-        clear_button.pack(side=tk.LEFT, padx=(0, 10))
-        
-        # 刷新按钮
+        clear_button.pack(side=tk.LEFT, padx=(0, 8))
+
         refresh_button = ttk.Button(
             button_frame,
             text="刷新",
             command=self.refresh_log,
-            width=10
+            style="Accent.TButton",
         )
         refresh_button.pack(side=tk.LEFT)
-        
-        # 日志显示区域
-        log_text_frame = ttk.LabelFrame(log_frame, text="日志内容", padding="10")
-        log_text_frame.pack(fill=tk.BOTH, expand=True)
-        
-        # 使用 ScrolledText 显示日志
+
+        card_wrap, log_text_frame = create_card(log_frame, padding=12)
+        card_wrap.pack(fill=tk.BOTH, expand=True)
+
         self.log_text = scrolledtext.ScrolledText(
             log_text_frame,
             wrap=tk.WORD,
             font=("Consolas", 10),
-            bg="#1e1e1e",
-            fg="#d4d4d4",
-            insertbackground="#d4d4d4",
-            state=tk.DISABLED  # 只读模式
+            bg="#0f172a",
+            fg="#e2e8f0",
+            insertbackground="#e2e8f0",
+            relief=tk.FLAT,
+            borderwidth=0,
+            state=tk.DISABLED
         )
         self.log_text.pack(fill=tk.BOTH, expand=True)
         

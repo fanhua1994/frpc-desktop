@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from .setting import load_frpc_toml, get_port_range, get_web_auth_from_json, get_config_from_json
 from .config_api import get_proxy_status, write_config_file, read_frpc_toml_content
+from .theme import COLORS
 from .util import validate_ip_address, validate_port, center_window
 
 
@@ -121,55 +122,54 @@ class ProxyManager:
             widget.destroy()
         
         # 代理页面内容
-        proxy_frame = ttk.Frame(self.content_frame, padding="20")
-        proxy_frame.pack(fill=tk.BOTH, expand=True)
-        
-        # 标题和按钮区域
-        header_frame = ttk.Frame(proxy_frame)
-        header_frame.pack(fill=tk.X, pady=(0, 10))
-        
-        title_label = ttk.Label(
-            header_frame,
-            text="代理配置",
-            font=("Arial", 16, "bold")
-        )
-        title_label.pack(side=tk.LEFT)
-        
-        # 按钮自右向左 pack，显示顺序为：新增、编辑、删除、刷新
+        proxy_frame = tk.Frame(self.content_frame, bg=COLORS["bg"])
+        proxy_frame.pack(fill=tk.BOTH, expand=True, padx=28, pady=24)
+
+        header_frame = tk.Frame(proxy_frame, bg=COLORS["bg"])
+        header_frame.pack(fill=tk.X, pady=(0, 16))
+
+        title_box = tk.Frame(header_frame, bg=COLORS["bg"])
+        title_box.pack(side=tk.LEFT)
+        ttk.Label(title_box, text="代理配置", style="Title.TLabel").pack(anchor=tk.W)
+        ttk.Label(title_box, text="管理当前隧道与端口映射", style="Muted.TLabel").pack(anchor=tk.W, pady=(4, 0))
+
         refresh_button = ttk.Button(
             header_frame,
             text="刷新",
             command=self.refresh_proxy_list,
-            width=10
         )
-        refresh_button.pack(side=tk.RIGHT, padx=(10, 0))
-        
+        refresh_button.pack(side=tk.RIGHT, padx=(8, 0))
+
         delete_button = ttk.Button(
             header_frame,
             text="删除",
             command=self.delete_proxy,
-            width=10
         )
-        delete_button.pack(side=tk.RIGHT, padx=(10, 0))
-        
+        delete_button.pack(side=tk.RIGHT, padx=(8, 0))
+
         edit_button = ttk.Button(
             header_frame,
             text="编辑",
             command=self.edit_proxy,
-            width=10
         )
-        edit_button.pack(side=tk.RIGHT, padx=(10, 0))
-        
+        edit_button.pack(side=tk.RIGHT, padx=(8, 0))
+
         add_button = ttk.Button(
             header_frame,
             text="新增",
             command=self.add_proxy,
-            width=10
+            style="Accent.TButton",
         )
-        add_button.pack(side=tk.RIGHT, padx=(10, 0))
-        
-        # 代理列表区域
-        list_frame = ttk.LabelFrame(proxy_frame, text="代理列表", padding="10")
+        add_button.pack(side=tk.RIGHT, padx=(8, 0))
+
+        list_wrap = tk.Frame(
+            proxy_frame,
+            bg=COLORS["card"],
+            highlightbackground=COLORS["border"],
+            highlightthickness=1,
+        )
+        list_wrap.pack(fill=tk.BOTH, expand=True)
+        list_frame = tk.Frame(list_wrap, bg=COLORS["card"], padx=8, pady=8)
         list_frame.pack(fill=tk.BOTH, expand=True)
         
         # 创建 Treeview 显示代理列表
@@ -458,7 +458,8 @@ class ProxyManager:
         """显示代理编辑对话框"""
         dialog = tk.Toplevel(self.parent_window)
         dialog.title("编辑代理" if proxy_data else "新增代理")
-        dialog.geometry("500x450")
+        dialog.configure(bg=COLORS["bg"])
+        dialog.geometry("520x480")
         dialog.resizable(False, False)
         dialog.transient(self.parent_window)
         dialog.grab_set()
