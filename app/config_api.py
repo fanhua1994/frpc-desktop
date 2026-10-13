@@ -3,10 +3,12 @@ import json
 import requests
 from typing import Optional, Dict, Any, List, Tuple
 
+from .util import FRPC_CONFIG_JSON, FRPC_TOML_DISPLAY, FRPC_TOML_FILE, LOG_FILE_TOML
+
 
 def get_web_auth() -> Optional[Tuple[str, str]]:
     """从 frpc_config.json 中获取 Web 服务认证信息"""
-    config_file = 'frpc_config.json'
+    config_file = FRPC_CONFIG_JSON
     if os.path.exists(config_file):
         try:
             with open(config_file, 'r', encoding='utf-8') as f:
@@ -23,7 +25,7 @@ def get_web_auth() -> Optional[Tuple[str, str]]:
 
 def get_base_url() -> Optional[str]:
     """从 frpc_config.json 中读取 webServer 配置，构建 baseUrl"""
-    config_file = 'frpc_config.json'
+    config_file = FRPC_CONFIG_JSON
     if not os.path.exists(config_file):
         return None
     
@@ -52,7 +54,7 @@ def read_config_file() -> Optional[Dict[str, Any]]:
     """
     base_url = get_base_url()
     if not base_url:
-        return {"error": "无法获取 baseUrl，请检查 frpc.toml 配置"}
+        return {"error": f"无法获取 baseUrl，请检查 {FRPC_TOML_DISPLAY} 配置"}
     
     try:
         url = f"{base_url}/api/config"
@@ -84,7 +86,7 @@ def reload_config() -> Optional[Dict[str, Any]]:
     """
     base_url = get_base_url()
     if not base_url:
-        return {"error": "无法获取 baseUrl，请检查 frpc.toml 配置"}
+        return {"error": f"无法获取 baseUrl，请检查 {FRPC_TOML_DISPLAY} 配置"}
     
     try:
         url = f"{base_url}/api/reload"
@@ -156,7 +158,7 @@ def write_config_file(config_data: str, auto_reload: bool = True) -> Optional[Di
     """
     base_url = get_base_url()
     if not base_url:
-        return {"error": "无法获取 baseUrl，请检查 frpc.toml 配置"}
+        return {"error": f"无法获取 baseUrl，请检查 {FRPC_TOML_DISPLAY} 配置"}
     
     try:
         url = f"{base_url}/api/config"
@@ -216,7 +218,7 @@ def query_config(key: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """
     base_url = get_base_url()
     if not base_url:
-        return {"error": "无法获取 baseUrl，请检查 frpc.toml 配置"}
+        return {"error": f"无法获取 baseUrl，请检查 {FRPC_TOML_DISPLAY} 配置"}
     
     try:
         url = f"{base_url}/api/config"
@@ -265,7 +267,7 @@ def get_proxy_status() -> Optional[Dict[str, Any]]:
     """
     base_url = get_base_url()
     if not base_url:
-        return {"error": "无法获取 baseUrl，请检查 frpc.toml 配置"}
+        return {"error": f"无法获取 baseUrl，请检查 {FRPC_TOML_DISPLAY} 配置"}
     
     try:
         url = f"{base_url}/api/status"
@@ -293,11 +295,11 @@ def read_frpc_toml_content() -> Optional[str]:
     """
     直接读取本地 frpc.toml 文件内容
     """
-    if not os.path.exists('frpc.toml'):
+    if not os.path.exists(FRPC_TOML_FILE):
         return None
     
     try:
-        with open('frpc.toml', 'r', encoding='utf-8') as f:
+        with open(FRPC_TOML_FILE, 'r', encoding='utf-8') as f:
             return f.read()
     except Exception:
         return None
@@ -371,7 +373,7 @@ def generate_toml_config(
         f'webServer.port = {web_port}',
         '',
         '# 日志配置',
-        'log.to = "frpc.log"',
+        f'log.to = "{LOG_FILE_TOML}"',
         f'log.level = "{log_level}"'
     ])
     

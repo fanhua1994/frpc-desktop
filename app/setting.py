@@ -12,7 +12,15 @@ except ImportError:
 from .downloader import detect_windows_arch, download_frpc, fetch_releases
 from .theme import COLORS, apply_theme
 from .util import (
+    FRPC_CONFIG_JSON,
+    FRPC_TOML_DISPLAY,
+    FRPC_TOML_FILE,
+    LOG_FILE_TOML,
     apply_window_icon,
+    ensure_config_dir,
+    ensure_log_dir,
+    migrate_legacy_config_files,
+    migrate_log_path_in_frpc_toml,
     validate_ip_address,
     validate_server_address,
     validate_port,
@@ -21,8 +29,9 @@ from .util import (
 
 
 def check_frpc_config():
-    """检测当前目录下是否存在 frpc.toml 文件"""
-    return os.path.exists('frpc.toml')
+    """检测 configs 目录下是否存在 frpc.toml 文件"""
+    migrate_legacy_config_files()
+    return os.path.exists(FRPC_TOML_FILE)
 
 
 def get_frpc_exe_path():
@@ -32,7 +41,8 @@ def get_frpc_exe_path():
 
 def save_frpc_exe_path(path):
     """保存 frpc.exe 路径"""
-    config_file = 'frpc_config.json'
+    config_file = FRPC_CONFIG_JSON
+    ensure_config_dir()
     config = {}
     if os.path.exists(config_file):
         try:
@@ -56,7 +66,8 @@ def get_port_range():
 
 def save_port_range(min_port, max_port):
     """保存端口范围配置"""
-    config_file = 'frpc_config.json'
+    config_file = FRPC_CONFIG_JSON
+    ensure_config_dir()
     config = {}
     if os.path.exists(config_file):
         try:
@@ -74,7 +85,8 @@ def save_port_range(min_port, max_port):
 
 def save_web_auth(username, password):
     """保存 Web 服务认证信息到 frpc_config.json"""
-    config_file = 'frpc_config.json'
+    config_file = FRPC_CONFIG_JSON
+    ensure_config_dir()
     config = {}
     if os.path.exists(config_file):
         try:
@@ -92,7 +104,7 @@ def save_web_auth(username, password):
 
 def get_web_auth_from_json():
     """从 frpc_config.json 获取 Web 服务认证信息"""
-    config_file = 'frpc_config.json'
+    config_file = FRPC_CONFIG_JSON
     if os.path.exists(config_file):
         try:
             with open(config_file, 'r', encoding='utf-8') as f:
@@ -121,7 +133,8 @@ def save_all_config_to_json(
     enable_subdomain=None
 ):
     """保存所有配置到 frpc_config.json"""
-    config_file = 'frpc_config.json'
+    config_file = FRPC_CONFIG_JSON
+    ensure_config_dir()
     config = {}
     if os.path.exists(config_file):
         try:
@@ -162,7 +175,7 @@ def save_all_config_to_json(
 
 def get_config_from_json(key, default=None):
     """从 frpc_config.json 获取指定配置项"""
-    config_file = 'frpc_config.json'
+    config_file = FRPC_CONFIG_JSON
     if os.path.exists(config_file):
         try:
             with open(config_file, 'r', encoding='utf-8') as f:
@@ -208,11 +221,11 @@ def _normalize_proxy(raw_proxy):
 
 def load_frpc_toml():
     """加载并解析 frpc.toml 配置文件"""
-    if not os.path.exists('frpc.toml'):
+    if not os.path.exists(FRPC_TOML_FILE):
         return None
 
     try:
-        with open('frpc.toml', 'rb') as f:
+        with open(FRPC_TOML_FILE, 'rb') as f:
             data = tomllib.load(f)
 
         config = {}
@@ -275,9 +288,9 @@ def generate_frpc_toml(server_addr, server_port, token=None, web_addr="127.0.0.1
     """
     # 读取现有配置文件，提取代理配置部分
     existing_proxies_content = ""
-    if os.path.exists('frpc.toml'):
+    if os.path.exists(FRPC_TOML_FILE):
         try:
-            with open('frpc.toml', 'r', encoding='utf-8') as f:
+            with open(FRPC_TOML_FILE, 'r', encoding='utf-8') as f:
                 existing_content = f.read()
             
             # 查找第一个 [[proxies]] 的位置
@@ -314,7 +327,7 @@ webServer.port = {web_port}
     
     config_content += f'''
 # 日志配置
-log.to = "frpc.log"
+log.to = "{LOG_FILE_TOML}"
 log.level = "{log_level}"
 '''
     
@@ -322,7 +335,9 @@ log.level = "{log_level}"
     if existing_proxies_content:
         config_content += existing_proxies_content
     
-    with open('frpc.toml', 'w', encoding='utf-8') as f:
+    ensure_config_dir()
+    ensure_log_dir()
+    with open(FRPC_TOML_FILE, 'w', encoding='utf-8') as f:
         f.write(config_content)
     
     return True
@@ -767,9 +782,9 @@ def show_settings_window(parent=None):
             )
             
             if existing_config:
-                messagebox.showinfo("成功", "配置文件已更新：frpc.toml")
+                messagebox.showinfo("成功", f"配置文件已更新：{FRPC_TOML_DISPLAY}")
             else:
-                messagebox.showinfo("成功", "配置文件已生成：frpc.toml")
+                messagebox.showinfo("成功", f"配置文件已生成：{FRPC_TOML_DISPLAY}")
             config_saved[0] = True  # 标记配置已保存
             root.destroy()
             if parent:
@@ -830,21 +845,28 @@ def init_frpc_config():
     返回:
         bool: 如果配置文件存在或已成功创建返回 True，如果用户取消了配置返回 False
     """
+    # 兼容旧版：根目录配置迁移到 configs/，日志路径迁移到 logs/
+    migrate_legacy_config_files()
     if not check_frpc_config():
         # 显示设置窗口，如果用户保存了配置返回 True，否则返回 False
         saved = show_settings_window()
         # 如果用户保存了配置，再次检查配置文件是否存在
         if saved and check_frpc_config():
+            ensure_config_dir()
+            ensure_log_dir()
             return True
         # 如果用户取消了，返回 False
         return False
+    migrate_log_path_in_frpc_toml()
+    ensure_config_dir()
+    ensure_log_dir()
     return True
 
 
 if __name__ == '__main__':
     # 测试代码
     if not check_frpc_config():
-        print("未找到 frpc.toml 文件，显示设置窗口...")
+        print(f"未找到 {FRPC_TOML_DISPLAY} 文件，显示设置窗口...")
         show_settings_window()
     else:
-        print("已找到 frpc.toml 文件")
+        print(f"已找到 {FRPC_TOML_DISPLAY} 文件")

@@ -6,7 +6,13 @@ from .setting import check_frpc_config, show_settings_window, get_frpc_exe_path,
 from .proxy import ProxyManager
 from .log import LogManager
 from .theme import COLORS, FONT_SMALL, FONT_UI, NavButton, apply_theme, create_card
-from .util import apply_window_icon, center_window
+from .util import (
+    FRPC_TOML_DISPLAY,
+    FRPC_TOML_FILE,
+    apply_window_icon,
+    center_window,
+    ensure_log_dir,
+)
 from .config_api import check_frpc_service_status
 from .version import (
     APP_NAME,
@@ -398,8 +404,8 @@ class MainWindow:
     def start_frpc(self):
         """启动 FRPC 服务"""
         # 检查配置文件是否存在
-        if not os.path.exists('frpc.toml'):
-            messagebox.showerror("错误", "未找到 frpc.toml 配置文件")
+        if not os.path.exists(FRPC_TOML_FILE):
+            messagebox.showerror("错误", f"未找到 {FRPC_TOML_DISPLAY} 配置文件")
             return
         
         # 获取 frpc.exe 路径
@@ -432,6 +438,9 @@ class MainWindow:
             self.update_settings_menu_state()
             return
         
+        # 确保日志目录存在，避免 frpc 因目录不存在而无法写日志
+        ensure_log_dir()
+
         # 显示加载状态
         self.show_loading("正在启动服务...")
         
@@ -441,7 +450,7 @@ class MainWindow:
                 # 启动 FRPC 进程
                 # 使用 subprocess.Popen 启动，不显示控制台窗口
                 self.frpc_process = subprocess.Popen(
-                    [frpc_exe_path, '-c', 'frpc.toml'],
+                    [frpc_exe_path, '-c', FRPC_TOML_FILE],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0

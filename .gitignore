@@ -10,5 +10,11 @@ release_info.json
 
 # frp binary & local config
 frp/
+configs/
 frpc_config.json
 frpc.toml
+
+# runtime logs
+logs/
+frpc.log
+frpc.*.log

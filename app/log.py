@@ -2,6 +2,7 @@ import os
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
 from .theme import COLORS, create_card
+from .util import LOG_FILE, LOG_FILE_TOML, ensure_log_dir
 
 
 class LogManager:
@@ -12,7 +13,8 @@ class LogManager:
         self.content_frame = content_frame
         self.log_text = None
         self.auto_refresh_id = None
-        self.log_file = 'frpc.log'
+        self.log_file = LOG_FILE
+        ensure_log_dir()
     
     def show_log_page(self):
         """显示日志页面"""
@@ -29,7 +31,7 @@ class LogManager:
         title_box = tk.Frame(header_frame, bg=COLORS["bg"])
         title_box.pack(side=tk.LEFT)
         ttk.Label(title_box, text="运行日志", style="Title.TLabel").pack(anchor=tk.W)
-        ttk.Label(title_box, text="实时查看 frpc.log", style="Muted.TLabel").pack(anchor=tk.W, pady=(4, 0))
+        ttk.Label(title_box, text=f"实时查看 {LOG_FILE_TOML}", style="Muted.TLabel").pack(anchor=tk.W, pady=(4, 0))
 
         button_frame = tk.Frame(header_frame, bg=COLORS["bg"])
         button_frame.pack(side=tk.RIGHT)
@@ -101,7 +103,7 @@ class LogManager:
                 except Exception as e:
                     self.log_text.insert(tk.END, f"读取日志文件失败: {str(e)}\n")
             else:
-                self.log_text.insert(tk.END, "日志文件不存在: frpc.log\n")
+                self.log_text.insert(tk.END, f"日志文件不存在: {LOG_FILE_TOML}\n")
                 self.log_text.insert(tk.END, "请确保 FRPC 服务已启动并配置了日志输出。\n")
             
             # 禁用文本区域（只读模式）
@@ -124,6 +126,7 @@ class LogManager:
             return
         
         try:
+            ensure_log_dir()
             # 清空日志文件
             if os.path.exists(self.log_file):
                 with open(self.log_file, 'w', encoding='utf-8') as f:

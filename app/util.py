@@ -3,6 +3,96 @@ import re
 import sys
 import tkinter as tk
 
+# 配置与日志目录（相对程序运行目录）
+CONFIG_DIR = "configs"
+FRPC_TOML_FILE = os.path.join(CONFIG_DIR, "frpc.toml")
+FRPC_CONFIG_JSON = os.path.join(CONFIG_DIR, "frpc_config.json")
+# 展示/提示用正斜杠路径
+FRPC_TOML_DISPLAY = "configs/frpc.toml"
+FRPC_CONFIG_JSON_DISPLAY = "configs/frpc_config.json"
+
+LOG_DIR = "logs"
+LOG_FILE = os.path.join(LOG_DIR, "frpc.log")
+# 写入 frpc.toml 时使用正斜杠，避免 Windows 反斜杠转义问题
+LOG_FILE_TOML = "logs/frpc.log"
+
+
+def ensure_config_dir() -> str:
+    """确保配置目录存在，返回目录路径。"""
+    os.makedirs(CONFIG_DIR, exist_ok=True)
+    return CONFIG_DIR
+
+
+def ensure_log_dir() -> str:
+    """确保日志目录存在，返回日志文件相对路径。"""
+    os.makedirs(LOG_DIR, exist_ok=True)
+    return LOG_FILE
+
+
+def _move_if_exists(src: str, dest: str) -> bool:
+    """若源文件存在且目标不存在，则移动到目标路径。"""
+    if not os.path.exists(src) or os.path.exists(dest):
+        return False
+    ensure_config_dir()
+    try:
+        os.replace(src, dest)
+        return True
+    except OSError:
+        try:
+            import shutil
+            shutil.move(src, dest)
+            return True
+        except OSError:
+            return False
+
+
+def migrate_legacy_config_files() -> bool:
+    """
+    将根目录旧版配置迁移到 configs/。
+    返回是否发生了迁移。
+    """
+    ensure_config_dir()
+    moved_toml = _move_if_exists("frpc.toml", FRPC_TOML_FILE)
+    moved_json = _move_if_exists("frpc_config.json", FRPC_CONFIG_JSON)
+    return moved_toml or moved_json
+
+
+def migrate_log_path_in_frpc_toml(toml_path=None) -> bool:
+    """
+    将旧版根目录日志路径迁移到 logs/frpc.log。
+    若文件不存在或无需修改则返回 False。
+    """
+    if toml_path is None:
+        toml_path = FRPC_TOML_FILE
+    if not os.path.exists(toml_path):
+        return False
+    try:
+        with open(toml_path, "r", encoding="utf-8") as f:
+            content = f.read()
+    except OSError:
+        return False
+
+    patterns = (
+        'log.to = "frpc.log"',
+        "log.to = 'frpc.log'",
+    )
+    if not any(p in content for p in patterns):
+        return False
+
+    new_content = content
+    for old in patterns:
+        new_content = new_content.replace(old, f'log.to = "{LOG_FILE_TOML}"')
+    if new_content == content:
+        return False
+
+    ensure_log_dir()
+    try:
+        with open(toml_path, "w", encoding="utf-8") as f:
+            f.write(new_content)
+    except OSError:
+        return False
+    return True
+
 
 def resource_path(relative_path):
     """获取资源文件路径，兼容开发环境和 PyInstaller 打包后的路径"""

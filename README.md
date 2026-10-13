@@ -18,7 +18,7 @@
   - 支持服务器地址、端口、Token 等基础配置
   - 支持 Web 服务地址和端口配置
   - 支持日志级别配置
-  - 自动保存配置到 `frpc.toml`
+  - 自动保存配置到 `configs/frpc.toml`
 
   ![配置设置](images/setting.png)
 
@@ -85,10 +85,10 @@ python build_release.py
 也可手动执行（请同步修改版本号，并自行生成/携带 `release_info.json`）：
 
 ```bash
-pyinstaller --onefile --windowed --icon=logo.ico --name frp-desktop-1.0.1 --add-data "logo.ico;." --add-data "release_info.json;." main.py
+pyinstaller --onefile --windowed --icon=logo.ico --name frp-desktop-1.0.2 --add-data "logo.ico;." --add-data "release_info.json;." main.py
 ```
 
-打包结果位于 `dist/frp-desktop-1.0.1.exe`。
+打包结果位于 `dist/frp-desktop-1.0.2.exe`。
 
 ## 使用方法
 
@@ -101,7 +101,7 @@ python main.py
 ### 首次使用
 
 1. **初始化配置**
-   - 首次启动时，如果检测到 `frpc.toml` 不存在，会自动弹出配置窗口
+   - 首次启动时，如果检测到 `configs/frpc.toml` 不存在，会自动弹出配置窗口
    - 填写服务器 IP、端口、Token（可选）等信息
    - 配置 FRPC.exe 路径
    - 设置服务器端口范围（用于限制代理的远程端口）
@@ -131,7 +131,7 @@ python main.py
 
 ### 基础配置
 
-配置文件：`frpc.toml`
+配置文件：`configs/frpc.toml`
 
 ```toml
 serverAddr = "服务器地址"
@@ -146,7 +146,7 @@ webServer.addr = "127.0.0.1"
 webServer.port = 7400
 
 # 日志配置
-log.to = "frpc.log"
+log.to = "logs/frpc.log"
 log.level = "info"  # trace, debug, info, warn, error
 ```
 
@@ -166,7 +166,7 @@ remotePort = 6000  # TCP/UDP 类型需要
 
 ### 应用配置
 
-配置文件：`frpc_config.json`
+配置文件：`configs/frpc_config.json`
 
 ```json
 {
@@ -190,9 +190,11 @@ frpc-desktop/
 │   └── util.py          # 工具函数（校验、窗口居中）
 ├── requirements.txt     # Python 依赖
 ├── images/              # 应用截图
-├── frpc.toml            # FRPC 配置文件（运行时生成）
-├── frpc_config.json     # 应用配置文件（运行时生成）
-├── frpc.log             # 日志文件（运行时生成）
+├── configs/             # 配置目录（运行时生成）
+│   ├── frpc.toml        # FRPC 配置文件
+│   └── frpc_config.json # 应用配置文件
+├── logs/                # 日志目录（运行时生成）
+│   └── frpc.log         # 日志文件
 └── README.md            # 项目说明文档
 ```
 
@@ -235,7 +237,7 @@ frpc-desktop/
 ## 注意事项
 
 1. **服务启动前**
-   - 确保已正确配置 `frpc.toml`
+   - 确保已正确配置 `configs/frpc.toml`
    - 确保已设置 `frpc.exe` 路径
    - 确保服务器地址和端口正确
 
@@ -246,7 +248,7 @@ frpc-desktop/
    - `localPort` 必须在 1-65535 之间
 
 3. **日志文件**
-   - 日志文件默认保存在程序运行目录下的 `frpc.log`
+   - 日志文件默认保存在程序运行目录下的 `logs/frpc.log`
    - 清空日志会永久删除日志内容，请谨慎操作
 
 4. **服务状态**
@@ -257,7 +259,7 @@ frpc-desktop/
 
 ### Q: 启动服务失败？
 A: 请检查：
-- `frpc.toml` 文件是否存在且配置正确
+- `configs/frpc.toml` 文件是否存在且配置正确
 - `frpc.exe` 路径是否正确
 - 服务器地址和端口是否可访问
 
@@ -271,7 +273,7 @@ A: 请检查：
 ### Q: 日志不显示？
 A: 请检查：
 - 服务是否已启动
-- `frpc.log` 文件是否存在
+- `logs/frpc.log` 文件是否存在
 - 日志级别配置是否正确
 
 ## 开发说明
@@ -296,6 +298,11 @@ A: 请检查：
 欢迎提交 Issue 和 Pull Request！
 
 ## 更新日志
+
+### v1.0.2
+- 配置文件改为保存在 `configs/`：`frpc.toml`、`frpc_config.json`
+- 日志文件改为保存在 `logs/frpc.log`，启动时自动创建目录
+- 兼容旧版：自动将根目录配置与 `frpc.log` 迁移到新目录
 
 ### v1.0.1
 - 美化客户端界面：侧边栏导航、卡片式布局与统一主题

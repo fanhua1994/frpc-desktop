@@ -3,7 +3,15 @@ from tkinter import ttk, messagebox
 from .setting import load_frpc_toml, get_port_range, get_web_auth_from_json, get_config_from_json
 from .config_api import get_proxy_status, write_config_file, read_frpc_toml_content
 from .theme import COLORS
-from .util import validate_ip_address, validate_port, center_window
+from .util import (
+    FRPC_TOML_FILE,
+    LOG_FILE_TOML,
+    ensure_config_dir,
+    ensure_log_dir,
+    validate_ip_address,
+    validate_port,
+    center_window,
+)
 
 
 def generate_frpc_toml_with_proxies(server_addr, server_port, token=None, web_addr="127.0.0.1", web_port=7400, log_level="info", web_user=None, web_password=None, proxies=None):
@@ -47,7 +55,7 @@ webServer.port = {web_port}
     
     config_content += f'''
 # 日志配置
-log.to = "frpc.log"
+log.to = "{LOG_FILE_TOML}"
 log.level = "{log_level}"
 '''
     
@@ -92,7 +100,9 @@ log.level = "{log_level}"
                 for key, value in proxy['annotations'].items():
                     config_content += f'annotations.{key} = "{value}"\n'
     
-    with open('frpc.toml', 'w', encoding='utf-8') as f:
+    ensure_config_dir()
+    ensure_log_dir()
+    with open(FRPC_TOML_FILE, 'w', encoding='utf-8') as f:
         f.write(config_content)
     
     return True
