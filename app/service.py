@@ -1,5 +1,7 @@
 import os
 import subprocess
+import threading
+import time
 import tkinter as tk
 from tkinter import ttk, messagebox
 from .setting import check_frpc_config, show_settings_window, get_frpc_exe_path, load_frpc_toml
@@ -20,7 +22,12 @@ from .version import (
     get_version_detail_display,
     get_version_display,
 )
-import threading
+
+# 定期检测 frpc 进程 / 服务是否仍存活
+PROCESS_MONITOR_INTERVAL_MS = 30_000
+# 启动 / 停止操作超时（超时后提示失败并恢复 UI）
+SERVICE_OP_TIMEOUT_MS = 10_000
+SERVICE_OP_TIMEOUT_SEC = SERVICE_OP_TIMEOUT_MS / 1000
 
 
 class MainWindow:
@@ -45,6 +52,11 @@ class MainWindow:
         # 初始化内容区域和进程对象（需要在 init_menu 之前初始化）
         self.current_page = None
         self.frpc_process = None  # FRPC 进程对象
+        self._process_monitor_after_id = None
+        self._last_known_running = None  # 进程监听缓存的运行状态
+        self._service_op_after_id = None
+        self._service_op_id = 0
+        self._service_op_kind = None
         
         # 初始化菜单
         self.init_menu()
@@ -59,6 +71,8 @@ class MainWindow:
         
         # 延迟检测已运行的进程（等待 UI 创建完成，在后台线程中执行避免阻塞）
         self.root.after(100, lambda: self.detect_existing_frpc_process_async())
+        # 每 30 秒监听一次 frpc 进程，存在/退出时刷新 UI
+        self.start_process_monitor()
         
         # 绑定窗口关闭事件，确保进程被清理
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
@@ -314,18 +328,100 @@ class MainWindow:
         """异步检测是否已有 frpc 进程在运行（在后台线程中执行）"""
         def check_thread():
             status_code = check_frpc_service_status()
-            if status_code == 200:
-                # 检测到服务在运行，更新 UI 状态（在主线程中执行）
-                self.root.after(0, self._update_ui_for_external_process)
+            running = status_code == 200
+            self.root.after(0, lambda: self._apply_monitored_service_state(running, source="startup"))
         
         # 在后台线程中执行检测，避免阻塞UI
         thread = threading.Thread(target=check_thread, daemon=True)
         thread.start()
+
+    def _is_operation_in_progress(self):
+        """启动/停止过程中跳过进程监听刷新，避免打断加载态"""
+        progress = getattr(self, "progress_frame", None)
+        if progress is None:
+            return False
+        try:
+            return bool(progress.winfo_ismapped())
+        except tk.TclError:
+            return False
+
+    def start_process_monitor(self):
+        """启动 frpc 进程定期监听"""
+        self.stop_process_monitor()
+        self._process_monitor_after_id = self.root.after(
+            PROCESS_MONITOR_INTERVAL_MS,
+            self._process_monitor_tick,
+        )
+
+    def stop_process_monitor(self):
+        """停止 frpc 进程定期监听"""
+        after_id = self._process_monitor_after_id
+        if not after_id:
+            return
+        try:
+            self.root.after_cancel(after_id)
+        except Exception:
+            pass
+        self._process_monitor_after_id = None
+
+    def _process_monitor_tick(self):
+        """每 30 秒检查一次 frpc 是否仍在运行，并同步 UI"""
+        self._process_monitor_after_id = None
+        # 先安排下一次，避免单次检测异常导致监听中断
+        self._process_monitor_after_id = self.root.after(
+            PROCESS_MONITOR_INTERVAL_MS,
+            self._process_monitor_tick,
+        )
+
+        if self._is_operation_in_progress():
+            return
+
+        # 本程序拉起的进程：主线程直接 poll，退出则立刻刷新
+        if self.frpc_process is not None:
+            if self.frpc_process.poll() is None:
+                self._apply_monitored_service_state(True, source="owned")
+                return
+            self.frpc_process = None
+            self._apply_monitored_service_state(False, source="owned_exit")
+            return
+
+        # 非本程序持有时，走 API 探测（后台线程，避免卡住 UI）
+        def check_api():
+            running = check_frpc_service_status() == 200
+            self.root.after(0, lambda: self._apply_monitored_service_state(running, source="api"))
+
+        threading.Thread(target=check_api, daemon=True).start()
+
+    def _apply_monitored_service_state(self, running, source="monitor"):
+        """根据监听到的运行状态刷新菜单与页面"""
+        if self._is_operation_in_progress():
+            return
+
+        previous = self._last_known_running
+        self._last_known_running = bool(running)
+
+        # 状态未变化时也同步一次菜单，防止首次启动缓存为空后漏刷新
+        self.update_proxy_menu_state()
+        self.update_settings_menu_state()
+
+        if previous is not None and previous == bool(running):
+            return
+
+        if self.current_page == "status":
+            self.update_status_ui()
+        elif not running and self.current_page == "proxy":
+            # 服务意外退出时离开代理页，避免继续操作失效接口
+            self.show_status_page()
+
+        # 启动时若已有外部进程，补一次外部运行提示
+        if running and source == "startup" and self.frpc_process is None:
+            self._update_ui_for_external_process()
     
     def _update_ui_for_external_process(self):
         """更新UI以显示外部启动的进程"""
         # 检测到服务在运行，更新 UI 状态
         # 注意：不设置 self.frpc_process，因为不是我们启动的进程
+        self._last_known_running = True
         if hasattr(self, 'status_label') and self.status_label:
             self._set_status_text(
                 "运行中（外部启动）",
@@ -400,6 +496,111 @@ class MainWindow:
         
         self.progress_bar.stop()
         self.progress_frame.pack_forget()
+
+    def _begin_service_op(self, kind):
+        """开始一次启动/停止操作，并启动 10 秒超时计时"""
+        self._cancel_service_op_timeout()
+        self._service_op_id += 1
+        op_id = self._service_op_id
+        self._service_op_kind = kind
+        self._service_op_after_id = self.root.after(
+            SERVICE_OP_TIMEOUT_MS,
+            lambda: self._on_service_op_timeout(op_id, kind),
+        )
+        return op_id
+
+    def _cancel_service_op_timeout(self):
+        """取消启动/停止超时计时"""
+        after_id = self._service_op_after_id
+        if not after_id:
+            return
+        try:
+            self.root.after_cancel(after_id)
+        except Exception:
+            pass
+        self._service_op_after_id = None
+
+    def _finish_service_op(self, op_id):
+        """结束操作；若 op_id 已失效（超时或被取代）则返回 False"""
+        if op_id != self._service_op_id:
+            return False
+        self._cancel_service_op_timeout()
+        # 递增 id，避免超时回调与成功/失败回调竞态重复弹窗
+        self._service_op_id += 1
+        self._service_op_kind = None
+        return True
+
+    def _invalidate_service_op(self):
+        """使进行中的操作回调失效（用于超时）"""
+        self._cancel_service_op_timeout()
+        self._service_op_id += 1
+        self._service_op_kind = None
+
+    def _terminate_frpc_process(self, timeout=2):
+        """尽力终止当前持有的 frpc 进程"""
+        process = self.frpc_process
+        self.frpc_process = None
+        if process is None:
+            return
+        try:
+            if process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=timeout)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=timeout)
+        except Exception:
+            pass
+
+    def _restore_ui_after_op(self, running):
+        """按实际运行状态恢复按钮与菜单"""
+        self.hide_loading()
+        self._last_known_running = bool(running)
+        if self.current_page == "status":
+            self.update_status_ui()
+        self.update_proxy_menu_state()
+        self.update_settings_menu_state()
+
+    def _on_service_op_timeout(self, op_id, kind):
+        """启动/停止超过 10 秒仍未完成"""
+        if op_id != self._service_op_id:
+            return
+        self._service_op_after_id = None
+        self._invalidate_service_op()
+
+        if kind == "start":
+            self._terminate_frpc_process()
+            self._restore_ui_after_op(False)
+            if self.current_page == "status" and hasattr(self, "status_label") and self.status_label:
+                self._set_status_text(
+                    "启动失败",
+                    "启动超时，请检查配置、客户端路径和服务器连通性。",
+                    COLORS["danger"],
+                )
+                if hasattr(self, "start_button") and self.start_button:
+                    self.start_button.config(state=tk.NORMAL)
+                if hasattr(self, "stop_button") and self.stop_button:
+                    self.stop_button.config(state=tk.DISABLED)
+            messagebox.showerror("错误", "启动 FRPC 服务失败：操作超时（超过 10 秒）")
+            return
+
+        # stop 超时：强制结束进程并恢复为已停止
+        self._terminate_frpc_process(timeout=1)
+        self._restore_ui_after_op(False)
+        if self.current_page == "proxy":
+            self.show_status_page()
+        elif self.current_page == "status" and hasattr(self, "status_label") and self.status_label:
+            self._set_status_text(
+                "已停止",
+                "停止超时，已尝试强制结束进程，请确认服务是否仍在运行。",
+                COLORS["warning"],
+            )
+            if hasattr(self, "start_button") and self.start_button:
+                self.start_button.config(state=tk.NORMAL)
+            if hasattr(self, "stop_button") and self.stop_button:
+                self.stop_button.config(state=tk.DISABLED)
+        messagebox.showerror("错误", "停止 FRPC 服务失败：操作超时（超过 10 秒）")
     
     def start_frpc(self):
         """启动 FRPC 服务"""
@@ -441,52 +642,63 @@ class MainWindow:
         # 确保日志目录存在，避免 frpc 因目录不存在而无法写日志
         ensure_log_dir()
 
-        # 显示加载状态
+        # 显示加载状态，并启动 10 秒超时
         self.show_loading("正在启动服务...")
+        op_id = self._begin_service_op("start")
         
         # 在后台线程中启动服务
         def start_thread():
             try:
                 # 启动 FRPC 进程
                 # 使用 subprocess.Popen 启动，不显示控制台窗口
-                self.frpc_process = subprocess.Popen(
+                process = subprocess.Popen(
                     [frpc_exe_path, '-c', FRPC_TOML_FILE],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
                 )
-                
-                # 等待一小段时间，确保进程启动
-                import time
-                time.sleep(0.5)
-                
-                # 检查进程是否成功启动
-                if self.frpc_process.poll() is not None:
-                    # 进程已退出，启动失败
-                    error_msg = "服务启动失败"
-                    try:
-                        _, stderr = self.frpc_process.communicate(timeout=1)
-                        if stderr:
-                            error_msg = stderr.decode('utf-8', errors='ignore')[:200]
-                    except:
-                        pass
-                    
-                    self.root.after(0, lambda: self._start_failed(error_msg))
-                    return
-                
-                # 更新 UI（在主线程中执行）
-                self.root.after(0, lambda: self._start_success())
+                self.frpc_process = process
+
+                deadline = time.time() + SERVICE_OP_TIMEOUT_SEC
+                while time.time() < deadline:
+                    if op_id != self._service_op_id:
+                        return
+
+                    if process.poll() is not None:
+                        error_msg = "服务启动失败"
+                        try:
+                            _, stderr = process.communicate(timeout=1)
+                            if stderr:
+                                error_msg = stderr.decode('utf-8', errors='ignore')[:200]
+                        except Exception:
+                            pass
+                        self.root.after(0, lambda msg=error_msg: self._start_failed(msg, op_id))
+                        return
+
+                    # 进程存活且 API 可访问，视为启动成功
+                    if check_frpc_service_status() == 200:
+                        self.root.after(0, lambda: self._start_success(op_id))
+                        return
+
+                    time.sleep(0.3)
+
+                # 线程侧超时：交由 UI 超时统一处理；若 UI 计时尚未触发则主动失败
+                self.root.after(0, lambda: self._start_failed("操作超时（超过 10 秒）", op_id))
                 
             except Exception as e:
-                self.root.after(0, lambda: self._start_failed(str(e)))
+                self.root.after(0, lambda err=str(e): self._start_failed(err, op_id))
         
         # 启动后台线程
         thread = threading.Thread(target=start_thread, daemon=True)
         thread.start()
     
-    def _start_success(self):
+    def _start_success(self, op_id=None):
         """启动成功的回调"""
+        if op_id is not None and not self._finish_service_op(op_id):
+            return
+
         self.hide_loading()
+        self._last_known_running = True
         
         # 更新 UI
         self._set_status_text("运行中", "FRPC 服务已启动，可以管理代理。", COLORS["success"])
@@ -500,12 +712,14 @@ class MainWindow:
         
         messagebox.showinfo("成功", "FRPC 服务已启动")
     
-    def _start_failed(self, error_msg):
+    def _start_failed(self, error_msg, op_id=None):
         """启动失败的回调"""
+        if op_id is not None and not self._finish_service_op(op_id):
+            return
+
         self.hide_loading()
-        
-        if self.frpc_process:
-            self.frpc_process = None
+        self._terminate_frpc_process()
+        self._last_known_running = False
         
         self._set_status_text("启动失败", "请检查配置、客户端路径和服务器连通性。", COLORS["danger"])
         self.start_button.config(state=tk.NORMAL)
@@ -539,41 +753,55 @@ class MainWindow:
             self.update_settings_menu_state()
             return
         
-        # 显示加载状态
+        # 显示加载状态，并启动 10 秒超时
         self.show_loading("正在停止服务...")
+        op_id = self._begin_service_op("stop")
+        process = self.frpc_process
         
         # 在后台线程中停止服务
         def stop_thread():
             try:
                 # 进程还在运行，终止它
-                self.frpc_process.terminate()
-                
-                # 等待进程结束，最多等待 5 秒
+                process.terminate()
+
+                # 先温和等待，接近超时仍未退出则强杀（留余量给 UI 超时）
                 try:
-                    self.frpc_process.wait(timeout=5)
+                    process.wait(timeout=max(1.0, SERVICE_OP_TIMEOUT_SEC - 2))
                 except subprocess.TimeoutExpired:
-                    # 如果进程没有响应，强制杀死
-                    self.frpc_process.kill()
-                    self.frpc_process.wait()
+                    process.kill()
+                    try:
+                        process.wait(timeout=1.5)
+                    except subprocess.TimeoutExpired:
+                        self.root.after(0, lambda: self._stop_failed("操作超时（超过 10 秒）", op_id))
+                        return
+
+                if op_id != self._service_op_id:
+                    return
                 
                 # 清理进程引用
-                self.frpc_process = None
+                if self.frpc_process is process:
+                    self.frpc_process = None
                 
                 # 更新 UI（在主线程中执行）
-                self.root.after(0, lambda: self._stop_success())
+                self.root.after(0, lambda: self._stop_success(op_id))
                 
             except Exception as e:
                 # 即使出错也清理引用
-                self.frpc_process = None
-                self.root.after(0, lambda: self._stop_failed(str(e)))
+                if self.frpc_process is process:
+                    self.frpc_process = None
+                self.root.after(0, lambda err=str(e): self._stop_failed(err, op_id))
         
         # 启动后台线程
         thread = threading.Thread(target=stop_thread, daemon=True)
         thread.start()
     
-    def _stop_success(self):
+    def _stop_success(self, op_id=None):
         """停止成功的回调"""
+        if op_id is not None and not self._finish_service_op(op_id):
+            return
+
         self.hide_loading()
+        self._last_known_running = False
         
         # 更新 UI
         self._set_status_text("已停止", "服务已停止，可以修改设置或重新启动。", COLORS["muted"])
@@ -591,9 +819,14 @@ class MainWindow:
         
         messagebox.showinfo("成功", "FRPC 服务已停止")
     
-    def _stop_failed(self, error_msg):
+    def _stop_failed(self, error_msg, op_id=None):
         """停止失败的回调"""
+        if op_id is not None and not self._finish_service_op(op_id):
+            return
+
         self.hide_loading()
+        self._terminate_frpc_process(timeout=1)
+        self._last_known_running = False
         
         self._set_status_text("已停止", "停止过程出现异常，请确认进程是否仍在运行。", COLORS["warning"])
         self.start_button.config(state=tk.NORMAL)
@@ -612,6 +845,9 @@ class MainWindow:
     
     def on_closing(self):
         """窗口关闭时的处理"""
+        self._cancel_service_op_timeout()
+        self.stop_process_monitor()
+
         # 停止日志自动刷新
         if hasattr(self, 'log_manager'):
             self.log_manager.stop_auto_refresh()

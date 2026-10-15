@@ -254,13 +254,15 @@ def apply_theme(root):
         rowheight=32,
         font=FONT_UI,
         bordercolor=COLORS["border"],
+        # 与表头水平内边距保持一致，避免列内容相对表头偏移
+        padding=(6, 4),
     )
     style.configure(
         "Treeview.Heading",
         background="#f3f4f6",
         foreground=COLORS["muted"],
         font=("Microsoft YaHei UI", 9, "bold"),
-        padding=8,
+        padding=(6, 6),
         relief="flat",
     )
     style.map("Treeview", background=[("selected", "#dbeafe")], foreground=[("selected", COLORS["text"])])

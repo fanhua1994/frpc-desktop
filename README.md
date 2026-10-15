@@ -25,6 +25,7 @@
 - **代理管理**
   - 可视化代理列表
   - 支持新增、编辑代理配置
+  - 支持启用/禁用开关：关闭后停止穿透，配置数据保留
   - 支持多种代理类型：TCP、UDP、HTTP、HTTPS、TCPMux、STCP、SUDP、XTCP
   - 根据代理类型动态显示配置字段
   - 实时同步代理状态
@@ -85,10 +86,10 @@ python build_release.py
 也可手动执行（请同步修改版本号，并自行生成/携带 `release_info.json`）：
 
 ```bash
-pyinstaller --onefile --windowed --icon=logo.ico --name frp-desktop-1.0.2 --add-data "logo.ico;." --add-data "release_info.json;." main.py
+pyinstaller --onefile --windowed --icon=logo.ico --name frp-desktop-1.0.3 --add-data "logo.ico;." --add-data "release_info.json;." main.py
 ```
 
-打包结果位于 `dist/frp-desktop-1.0.2.exe`。
+打包结果位于 `dist/frp-desktop-1.0.3.exe`。
 
 ## 使用方法
 
@@ -298,6 +299,14 @@ A: 请检查：
 欢迎提交 Issue 和 Pull Request！
 
 ## 更新日志
+
+### v1.0.3
+- 代理支持启用/禁用开关：关闭后停止穿透，配置数据保留
+- 代理列表以配置为准展示，禁用项仍可见；支持工具栏与右键快速切换
+- 修复代理列表表头与数据列不对齐
+- 启用代理后自动轮询刷新，避免短暂显示 `wait start`
+- 每 30 秒监听 frpc 进程，存在/退出时及时刷新服务状态与菜单
+- 启动/停止服务超过 10 秒未完成则提示失败并恢复 UI
 
 ### v1.0.2
 - 配置文件改为保存在 `configs/`：`frpc.toml`、`frpc_config.json`

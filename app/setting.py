@@ -202,8 +202,8 @@ def _normalize_proxy(raw_proxy):
     for key in ('name', 'type', 'localIP', 'subdomain'):
         if key in raw_proxy:
             proxy[key] = raw_proxy[key]
-    if 'enabled' in raw_proxy:
-        proxy['enabled'] = raw_proxy['enabled']
+    # 缺省视为启用，保证旧配置也能正确显示开关状态
+    proxy['enabled'] = bool(raw_proxy['enabled']) if 'enabled' in raw_proxy else True
     if 'localPort' in raw_proxy:
         proxy['localPort'] = int(raw_proxy['localPort'])
     if 'remotePort' in raw_proxy:

@@ -66,9 +66,9 @@ log.level = "{log_level}"
             config_content += f'name = "{proxy.get("name", "")}"\n'
             config_content += f'type = "{proxy.get("type", "")}"\n'
             
-            # enabled (默认 true)
-            if 'enabled' in proxy:
-                config_content += f'enabled = {str(proxy["enabled"]).lower()}\n'
+            # enabled：关闭后不穿透，但配置仍保留在文件中
+            enabled = proxy.get('enabled', True)
+            config_content += f'enabled = {str(bool(enabled)).lower()}\n'
             
             # localIP
             if 'localIP' in proxy:
@@ -108,6 +108,10 @@ log.level = "{log_level}"
     return True
 
 
+# frpc 重载后短暂中间态，需延迟刷新
+_PENDING_PROXY_STATUSES = frozenset({'wait start', 'wait_start', 'new'})
+
+
 class ProxyManager:
     """代理管理类"""
     
@@ -124,6 +128,7 @@ class ProxyManager:
         self.content_frame = content_frame
         self.refresh_callback = refresh_callback
         self.proxy_tree = None
+        self._status_refresh_after_id = None
     
     def show_proxy_page(self):
         """显示代理页面"""
@@ -157,6 +162,13 @@ class ProxyManager:
         )
         delete_button.pack(side=tk.RIGHT, padx=(8, 0))
 
+        toggle_button = ttk.Button(
+            header_frame,
+            text="启用/禁用",
+            command=self.toggle_proxy_enabled,
+        )
+        toggle_button.pack(side=tk.RIGHT, padx=(8, 0))
+
         edit_button = ttk.Button(
             header_frame,
             text="编辑",
@@ -183,28 +195,39 @@ class ProxyManager:
         list_frame.pack(fill=tk.BOTH, expand=True)
         
         # 创建 Treeview 显示代理列表
-        columns = ('name', 'type', 'status', 'local_addr', 'remote_addr')
+        columns = ('name', 'type', 'enabled', 'status', 'local_addr', 'remote_addr')
         self.proxy_tree = ttk.Treeview(list_frame, columns=columns, show='headings', height=10)
+
+        # 隐藏树形列，避免占位导致表头与数据错位
+        self.proxy_tree.column('#0', width=0, minwidth=0, stretch=False)
+
+        column_specs = (
+            ('name', '名称', 110, True),
+            ('type', '类型', 70, False),
+            ('enabled', '开关', 60, False),
+            ('status', '状态', 100, False),
+            ('local_addr', '本地地址', 150, True),
+            ('remote_addr', '远程地址', 160, True),
+        )
+        for col_id, title, width, stretch in column_specs:
+            # 表头与单元格统一左对齐，保证视觉列对齐
+            self.proxy_tree.heading(col_id, text=title, anchor=tk.W)
+            self.proxy_tree.column(
+                col_id,
+                width=width,
+                minwidth=width,
+                anchor=tk.W,
+                stretch=stretch,
+            )
         
-        # 设置列标题和宽度
-        self.proxy_tree.heading('name', text='名称')
-        self.proxy_tree.heading('type', text='类型')
-        self.proxy_tree.heading('status', text='状态')
-        self.proxy_tree.heading('local_addr', text='本地地址')
-        self.proxy_tree.heading('remote_addr', text='远程地址')
-        
-        self.proxy_tree.column('name', width=120)
-        self.proxy_tree.column('type', width=80)
-        self.proxy_tree.column('status', width=100)
-        self.proxy_tree.column('local_addr', width=150)
-        self.proxy_tree.column('remote_addr', width=150)
-        
-        # 滚动条
+        # 滚动条放在同一行布局，不挤压表头列宽计算
         scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.proxy_tree.yview)
         self.proxy_tree.configure(yscrollcommand=scrollbar.set)
-        
-        self.proxy_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        list_frame.grid_columnconfigure(0, weight=1)
+        list_frame.grid_rowconfigure(0, weight=1)
+        self.proxy_tree.grid(row=0, column=0, sticky='nsew')
+        scrollbar.grid(row=0, column=1, sticky='ns')
         
         # 绑定双击事件编辑代理
         self.proxy_tree.bind('<Double-1>', self.edit_proxy)
@@ -215,38 +238,245 @@ class ProxyManager:
         # 初始加载代理列表
         self.refresh_proxy_list()
     
+    def _format_local_addr(self, proxy):
+        """根据配置拼本地地址"""
+        local_ip = proxy.get('localIP', '')
+        local_port = proxy.get('localPort', '')
+        if local_ip and local_port != '':
+            return f"{local_ip}:{local_port}"
+        return local_ip or ''
+
+    def _format_remote_addr(self, proxy):
+        """根据配置拼远程地址展示"""
+        if proxy.get('remotePort') not in (None, ''):
+            return str(proxy['remotePort'])
+        if proxy.get('subdomain'):
+            return proxy['subdomain']
+        custom_domains = proxy.get('customDomains')
+        if custom_domains:
+            if isinstance(custom_domains, list):
+                return ','.join(str(d) for d in custom_domains)
+            return str(custom_domains)
+        return ''
+
     def refresh_proxy_list(self):
-        """刷新代理列表"""
+        """刷新代理列表（配置文件 + 运行状态，禁用代理也会显示）"""
         if not self.proxy_tree:
             return
         
         # 清空现有列表
         for item in self.proxy_tree.get_children():
             self.proxy_tree.delete(item)
-        
-        # 从 status 接口加载代理列表
-        status = get_proxy_status()
-        
-        if 'error' in status:
-            self.proxy_tree.insert('', tk.END, values=('', '', status['error'], '', ''))
-            return
-        
-        # 遍历所有类型的代理
+
+        config = load_frpc_toml() or {}
+        config_proxies = config.get('proxies', []) or []
+
+        # 运行状态按名称索引
+        status_by_name = {}
+        status = get_proxy_status() or {}
+        status_error = status.get('error') if isinstance(status, dict) else None
+        if isinstance(status, dict) and not status_error:
+            for proxy_type, proxy_list in status.items():
+                if isinstance(proxy_list, list):
+                    for proxy in proxy_list:
+                        name = str(proxy.get('name', ''))
+                        if name:
+                            status_by_name[name] = proxy
+
+        # 以配置文件为准展示，确保关闭后数据仍可见
         proxy_count = 0
-        for proxy_type, proxy_list in status.items():
-            if isinstance(proxy_list, list):
-                for proxy in proxy_list:
-                    name = proxy.get('name', '')
-                    ptype = proxy.get('type', proxy_type)
-                    status_text = proxy.get('status', 'unknown')
-                    local_addr = proxy.get('local_addr', '')
-                    remote_addr = proxy.get('remote_addr', '')
-                    
-                    self.proxy_tree.insert('', tk.END, values=(name, ptype, status_text, local_addr, remote_addr), tags=(name,))
-                    proxy_count += 1
-        
+        for proxy in config_proxies:
+            name = str(proxy.get('name', ''))
+            if not name:
+                continue
+            ptype = proxy.get('type', '')
+            enabled = bool(proxy.get('enabled', True))
+            enabled_text = '开' if enabled else '关'
+            runtime = status_by_name.get(name)
+
+            if not enabled:
+                status_text = '已禁用'
+            elif runtime:
+                status_text = self._display_status_text(runtime.get('status', 'unknown'))
+            elif status_error:
+                status_text = status_error
+            else:
+                status_text = '未知'
+
+            if runtime:
+                local_addr = runtime.get('local_addr') or self._format_local_addr(proxy)
+                remote_addr = runtime.get('remote_addr') or self._format_remote_addr(proxy)
+            else:
+                local_addr = self._format_local_addr(proxy)
+                remote_addr = self._format_remote_addr(proxy)
+
+            self.proxy_tree.insert(
+                '',
+                tk.END,
+                values=(name, ptype, enabled_text, status_text, local_addr, remote_addr),
+                tags=(name,),
+            )
+            proxy_count += 1
+
         if proxy_count == 0:
-            self.proxy_tree.insert('', tk.END, values=('', '', '暂无代理', '', ''))
+            empty_status = status_error or '暂无代理'
+            self.proxy_tree.insert('', tk.END, values=('', '', '', empty_status, '', ''))
+
+    def _display_status_text(self, status_text):
+        """将 frpc 中间态文案转为更友好的展示"""
+        if status_text is None:
+            return ''
+        raw = str(status_text).strip()
+        if raw.lower() in _PENDING_PROXY_STATUSES:
+            return '启动中'
+        return raw
+
+    def _is_proxy_status_pending(self, proxy_name):
+        """判断指定代理是否仍处于启动中间态"""
+        status = get_proxy_status() or {}
+        if not isinstance(status, dict) or status.get('error'):
+            return False
+        for proxy_list in status.values():
+            if not isinstance(proxy_list, list):
+                continue
+            for proxy in proxy_list:
+                if str(proxy.get('name', '')) != str(proxy_name):
+                    continue
+                return str(proxy.get('status', '')).strip().lower() in _PENDING_PROXY_STATUSES
+        # 已启用但尚未出现在 status 接口中，视为仍在启动
+        return True
+
+    def _cancel_status_settle_refresh(self):
+        """取消进行中的状态稳定轮询"""
+        after_id = getattr(self, '_status_refresh_after_id', None)
+        if not after_id:
+            return
+        try:
+            self.parent_window.after_cancel(after_id)
+        except Exception:
+            pass
+        self._status_refresh_after_id = None
+
+    def _schedule_status_settle_refresh(self, proxy_name, attempts=8, interval_ms=500):
+        """
+        启用/重载后状态常短暂为 wait start，延迟轮询直到稳定。
+        """
+        self._cancel_status_settle_refresh()
+
+        def poll(remaining):
+            self._status_refresh_after_id = None
+            if not self.proxy_tree:
+                return
+            try:
+                if not self.proxy_tree.winfo_exists():
+                    return
+            except Exception:
+                return
+
+            self.refresh_proxy_list()
+            if remaining <= 1:
+                return
+            if self._is_proxy_status_pending(proxy_name):
+                self._status_refresh_after_id = self.parent_window.after(
+                    interval_ms,
+                    lambda: poll(remaining - 1),
+                )
+
+        # 先给 frpc 一点时间完成启动，再开始轮询
+        self._status_refresh_after_id = self.parent_window.after(
+            interval_ms,
+            lambda: poll(attempts),
+        )
+
+    def _get_selected_proxy_name(self):
+        """获取当前选中的代理名称"""
+        if not self.proxy_tree:
+            return None
+        selection = self.proxy_tree.selection()
+        if not selection:
+            return None
+        item = self.proxy_tree.item(selection[0])
+        values = item.get('values') or []
+        if not values:
+            return None
+        proxy_name = str(values[0]).strip()
+        if not proxy_name or proxy_name in ('暂无代理',):
+            return None
+        return proxy_name
+
+    def _write_config_with_proxies(self, config):
+        """根据当前配置重写 frpc.toml 并通过 API 重载"""
+        web_username, web_password = get_web_auth_from_json()
+        if not web_username or not web_password:
+            web_user_from_toml = config.get('web_user', '')
+            web_password_from_toml = config.get('web_password', '')
+            if web_user_from_toml and web_password_from_toml:
+                web_username = web_user_from_toml
+                web_password = web_password_from_toml
+
+        generate_frpc_toml_with_proxies(
+            config['server_addr'],
+            int(config['server_port']),
+            config.get('token'),
+            config.get('web_addr', '127.0.0.1'),
+            int(config.get('web_port', 7400)),
+            config.get('log_level', 'info'),
+            web_username if web_username else None,
+            web_password if web_password else None,
+            config.get('proxies', [])
+        )
+
+        new_content = read_frpc_toml_content()
+        return write_config_file(new_content, auto_reload=True)
+
+    def toggle_proxy_enabled(self):
+        """切换代理启用状态：关闭后不穿透，配置数据保留"""
+        proxy_name = self._get_selected_proxy_name()
+        if not proxy_name:
+            messagebox.showwarning("提示", "请先选择要切换开关的代理")
+            return
+
+        config = load_frpc_toml()
+        if not config or not config.get('proxies'):
+            messagebox.showerror("错误", "无法读取配置文件")
+            return
+
+        target = None
+        for proxy in config['proxies']:
+            if str(proxy.get('name', '')) == proxy_name:
+                target = proxy
+                break
+
+        if not target:
+            messagebox.showwarning("提示", f"未找到代理 '{proxy_name}'")
+            return
+
+        current_enabled = bool(target.get('enabled', True))
+        target['enabled'] = not current_enabled
+        action = '启用' if target['enabled'] else '禁用'
+
+        try:
+            result = self._write_config_with_proxies(config)
+            # 本地文件已先写入，无论 API 成败都刷新列表以反映磁盘状态
+            self.refresh_proxy_list()
+            if 'error' in result:
+                messagebox.showerror(
+                    "错误",
+                    f"本地配置已{action}，但同步到服务失败: {result['error']}\n请检查服务后点击刷新或再次切换。"
+                )
+            elif 'reload_error' in result:
+                error_msg = f"代理已{action}，但重载失败:\n{result['reload_error']}"
+                if result.get('reload_response'):
+                    error_msg += f"\n\n详细信息: {result['reload_response']}"
+                messagebox.showerror("重载失败", error_msg)
+            else:
+                # 启用后 status 常短暂返回 wait start，延迟轮询到稳定状态
+                if target['enabled']:
+                    self._schedule_status_settle_refresh(proxy_name)
+                messagebox.showinfo("成功", f"代理 '{proxy_name}' 已{action}")
+        except Exception as e:
+            self.refresh_proxy_list()
+            messagebox.showerror("错误", f"{action}失败: {str(e)}")
     
     def show_context_menu(self, event):
         """显示右键菜单"""
@@ -260,20 +490,26 @@ class ProxyManager:
         
         # 获取该项的值
         item_values = self.proxy_tree.item(item, 'values')
-        if not item_values or len(item_values) < 5:
+        if not item_values or len(item_values) < 6:
             return
         
         proxy_name = item_values[0]
         if not proxy_name or str(proxy_name).strip() in ('', '暂无代理'):
             return
         
-        remote_addr = item_values[4]  # remote_addr 在第5列（索引4）
+        enabled_text = item_values[2]
+        remote_addr = item_values[5]  # remote_addr 在第6列（索引5）
         
         # 创建右键菜单
         context_menu = tk.Menu(self.parent_window, tearoff=0)
         context_menu.add_command(
             label="编辑",
             command=self.edit_proxy
+        )
+        toggle_label = "禁用（保留配置）" if enabled_text == '开' else "启用"
+        context_menu.add_command(
+            label=toggle_label,
+            command=self.toggle_proxy_enabled
         )
         if remote_addr and remote_addr.strip():
             context_menu.add_separator()
@@ -422,33 +658,8 @@ class ProxyManager:
         
         # 生成完整配置并写入
         try:
-            # 优先从 frpc_config.json 读取 web 认证信息，如果没有则从 frpc.toml 读取
-            web_username, web_password = get_web_auth_from_json()
-            if not web_username or not web_password:
-                # 如果 JSON 中没有，尝试从 toml 配置中读取
-                web_user_from_toml = config.get('web_user', '')
-                web_password_from_toml = config.get('web_password', '')
-                if web_user_from_toml and web_password_from_toml:
-                    web_username = web_user_from_toml
-                    web_password = web_password_from_toml
-            
-            # 使用 generate_frpc_toml_with_proxies 生成包含代理的完整配置
-            generate_frpc_toml_with_proxies(
-                config['server_addr'],
-                int(config['server_port']),
-                config.get('token'),
-                config.get('web_addr', '127.0.0.1'),
-                int(config.get('web_port', 7400)),
-                config.get('log_level', 'info'),
-                web_username if web_username else None,
-                web_password if web_password else None,
-                config.get('proxies', [])
-            )
-            
-            # 通过 API 写入配置
-            new_content = read_frpc_toml_content()
-            result = write_config_file(new_content, auto_reload=True)
-            
+            result = self._write_config_with_proxies(config)
+
             if 'error' in result:
                 messagebox.showerror("错误", f"删除代理失败: {result['error']}")
             elif 'reload_error' in result:
@@ -469,7 +680,7 @@ class ProxyManager:
         dialog = tk.Toplevel(self.parent_window)
         dialog.title("编辑代理" if proxy_data else "新增代理")
         dialog.configure(bg=COLORS["bg"])
-        dialog.geometry("520x480")
+        dialog.geometry("560x500")
         dialog.resizable(False, False)
         dialog.transient(self.parent_window)
         dialog.grab_set()
@@ -501,11 +712,11 @@ class ProxyManager:
             type_combo.set('tcp')
         type_combo.grid(row=1, column=1, pady=5, padx=10, sticky=tk.W)
         
-        # 是否启用
-        ttk.Label(frame, text="启用:").grid(row=2, column=0, sticky=tk.W, pady=5)
+        # 是否启用（关闭后不穿透，配置数据保留）
+        ttk.Label(frame, text="启用穿透:").grid(row=2, column=0, sticky=tk.W, pady=5)
         enabled_var = tk.BooleanVar()
         enabled_var.set(proxy_data.get('enabled', True) if proxy_data else True)
-        enabled_check = ttk.Checkbutton(frame, variable=enabled_var)
+        enabled_check = ttk.Checkbutton(frame, text="关闭后保留配置，仅停止穿透", variable=enabled_var)
         enabled_check.grid(row=2, column=1, pady=5, padx=10, sticky=tk.W)
         
         # 本地IP
@@ -719,33 +930,8 @@ class ProxyManager:
             
             # 生成完整配置并写入
             try:
-                # 优先从 frpc_config.json 读取 web 认证信息，如果没有则从 frpc.toml 读取
-                web_username, web_password = get_web_auth_from_json()
-                if not web_username or not web_password:
-                    # 如果 JSON 中没有，尝试从 toml 配置中读取
-                    web_user_from_toml = config.get('web_user', '')
-                    web_password_from_toml = config.get('web_password', '')
-                    if web_user_from_toml and web_password_from_toml:
-                        web_username = web_user_from_toml
-                        web_password = web_password_from_toml
-                
-                # 使用 generate_frpc_toml_with_proxies 生成包含代理的完整配置
-                generate_frpc_toml_with_proxies(
-                    config['server_addr'],
-                    int(config['server_port']),
-                    config.get('token'),
-                    config.get('web_addr', '127.0.0.1'),
-                    int(config.get('web_port', 7400)),
-                    config.get('log_level', 'info'),
-                    web_username if web_username else None,
-                    web_password if web_password else None,
-                    config.get('proxies', [])
-                )
-                
-                # 通过 API 写入配置
-                new_content = read_frpc_toml_content()
-                result = write_config_file(new_content, auto_reload=True)
-                
+                result = self._write_config_with_proxies(config)
+
                 if 'error' in result:
                     messagebox.showerror("错误", f"写入配置失败: {result['error']}")
                 elif 'reload_error' in result:
@@ -761,6 +947,8 @@ class ProxyManager:
                     messagebox.showinfo("成功", result.get('message', f'代理配置已{action}并重载'))
                     dialog.destroy()
                     self.refresh_proxy_list()
+                    if enabled:
+                        self._schedule_status_settle_refresh(name)
             except Exception as e:
                 messagebox.showerror("错误", f"保存配置失败: {str(e)}")
         
